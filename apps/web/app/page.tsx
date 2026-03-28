@@ -1,102 +1,185 @@
-import Image, { type ImageProps } from "next/image";
-import { Button } from "@repo/ui/button";
-import styles from "./page.module.css";
+'use client'
 
-type Props = Omit<ImageProps, "src"> & {
-  srcLight: string;
-  srcDark: string;
-};
+import { useEffect, useState } from 'react'
+import EventModal, { CalEvent, EventPayload } from '../components/EventModal'
 
-const ThemeImage = (props: Props) => {
-  const { srcLight, srcDark, ...rest } = props;
+const btnStyle = {
+  background: 'transparent',
+  border: 'none',
+  cursor: 'pointer',
+  borderRadius: '50%',
+  width: 32,
+  height: 32,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 18,
+  color: '#70757a',
+}
+
+const todayBtnStyle = {
+  background: 'transparent',
+  border: '1px solid #dadce0',
+  borderRadius: 4,
+  padding: '8px 16px',
+  fontSize: 14,
+  cursor: 'pointer',
+  color: '#3c4043',
+}
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+export default function CalendarPage() {
+  const [current, setCurrent] = useState(new Date())
+  const [events, setEvents] = useState<CalEvent[]>([])
+  const [modalDate, setModalDate] = useState<Date | null>(null)
+  const [editEvent, setEditEvent] = useState<CalEvent | null>(null)
+
+  useEffect(() => {
+    fetch('http://localhost:3001/events/findAll', { method: 'POST' })
+      .then(r => r.json())
+      .then(json => { if (json.success) setEvents(json.data) })
+      .catch(() => {})
+  }, [])
+
+  const y = current.getFullYear()
+  const m = current.getMonth()
+  const today = new Date()
+
+  let startDow = new Date(y, m, 1).getDay()
+  startDow = startDow === 0 ? 6 : startDow - 1
+  const daysInMonth = new Date(y, m + 1, 0).getDate()
+  const daysInPrev = new Date(y, m, 0).getDate()
+  const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7
+
+  const evByDay: Record<number, CalEvent[]> = {}
+
+  events.forEach(ev => {
+    const start = new Date(ev.startTime)
+    const end = new Date(ev.endTime)
+
+    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+
+    const cursor = new Date(startDay)
+    while (cursor <= endDay) {
+      if (cursor.getFullYear() === y && cursor.getMonth() === m) {
+        const day = cursor.getDate()
+        if (!evByDay[day]) evByDay[day] = []
+        evByDay[day].push(ev)
+      }
+      cursor.setDate(cursor.getDate() + 1)
+    }
+  })
+
+  Object.values(evByDay).forEach(dayEvents => {
+    dayEvents.sort((a, b) => {
+      if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
+      return a.startTime - b.startTime
+    })
+  })
+
+  const changeMonth = (dir: number) => setCurrent(new Date(y, m + dir, 1))
+
+  const handleCreate = async (payload: EventPayload) => {
+    try {
+      const res = await fetch('http://localhost:3001/events/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (json.success) setEvents(prev => [...prev, json.data])
+    } catch(e) { console.error(e) }
+  }
+
+  const handleUpdate = async (payload: EventPayload) => {
+    if (!editEvent) return
+    try {
+      const res = await fetch(`http://localhost:3001/events/update/${editEvent.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (json.success) setEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, ...payload } : e))
+    } catch(e) { console.error(e) }
+    setEditEvent(null)
+  }
+
+  const handleDelete = async () => {
+    if (!editEvent) return
+    try {
+      await fetch(`http://localhost:3001/events/delete/${editEvent.id}`, { method: 'POST' })
+      setEvents(prev => prev.filter(e => e.id !== editEvent.id))
+    } catch(e) { console.error(e) }
+    setEditEvent(null)
+  }
 
   return (
-    <>
-      <Image {...rest} src={srcLight} className="imgLight" />
-      <Image {...rest} src={srcDark} className="imgDark" />
-    </>
-  );
-};
+    <div style={{ fontFamily: 'Google Sans, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid #e0e0e0' }}>
+        <button onClick={() => setCurrent(new Date())} style={todayBtnStyle}>Today</button>
+        <button onClick={() => changeMonth(-1)} style={btnStyle}>&#8249;</button>
+        <button onClick={() => changeMonth(1)} style={btnStyle}>&#8250;</button>
+        <span style={{ fontSize: 20, fontWeight: 400 }}>{MONTHS[m]} {y}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
+          <div key={d} style={{ textAlign: 'center', fontSize: 11, color: '#70757a', padding: '8px 0', borderBottom: '1px solid #e0e0e0' }}>{d}</div>
+        ))}
+        {Array.from({ length: totalCells }, (_, i) => {
+          const offset = i - startDow
+          const isOther = offset < 0 || offset >= daysInMonth
+          const dayNum = offset < 0 ? daysInPrev + offset + 1 : offset >= daysInMonth ? offset - daysInMonth + 1 : offset + 1
+          const isToday = !isOther && dayNum === today.getDate() && m === today.getMonth() && y === today.getFullYear()
 
-export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <ThemeImage
-          className={styles.logo}
-          srcLight="turborepo-dark.svg"
-          srcDark="turborepo-light.svg"
-          alt="Turborepo logo"
-          width={180}
-          height={38}
-          priority
+          return (
+            <div
+              key={i}
+              onClick={() => { if (!isOther) setModalDate(new Date(y, m, dayNum)) }}
+              style={{ minHeight: 100, borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', padding: '4px 2px', cursor: isOther ? 'default' : 'pointer' }}
+            >
+              <div style={{
+                fontSize: 13, color: isOther ? '#ccc' : '#70757a', marginBottom: 4, padding: '0 2px',
+                ...(isToday ? { background: '#1a73e8', color: 'white', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500 } : {})
+              }}>{dayNum}</div>
+              {!isOther && (evByDay[dayNum] ?? []).map(ev => {
+                const start = new Date(ev.startTime)
+                const hh = String(start.getHours()).padStart(2, '0')
+                const mm = String(start.getMinutes()).padStart(2, '0')
+                return (
+                  <div
+                    key={ev.id}
+                    onClick={e => { e.stopPropagation(); setEditEvent(ev) }}
+                    style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3, marginBottom: 2, background: ev.color || '#1a73e8', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                  >
+                    {ev.allDay ? 'All day' : `${hh}:${mm}`} {ev.title}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+
+      {modalDate && (
+        <EventModal
+          date={modalDate}
+          onClose={() => setModalDate(null)}
+          onSave={async (payload) => { await handleCreate(payload); setModalDate(null) }}
         />
-        <ol>
-          <li>
-            Get started by editing <code>apps/web/app/page.tsx</code>
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+      )}
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new/clone?demo-description=Learn+to+implement+a+monorepo+with+a+two+Next.js+sites+that+has+installed+three+local+packages.&demo-image=%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F4K8ZISWAzJ8X1504ca0zmC%2F0b21a1c6246add355e55816278ef54bc%2FBasic.png&demo-title=Monorepo+with+Turborepo&demo-url=https%3A%2F%2Fexamples-basic-web.vercel.sh%2F&from=templates&project-name=Monorepo+with+Turborepo&repository-name=monorepo-turborepo&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fturborepo%2Ftree%2Fmain%2Fexamples%2Fbasic&root-directory=apps%2Fdocs&skippable-integrations=1&teamSlug=vercel&utm_source=create-turbo"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://turborepo.dev/docs?utm_source"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-        <Button appName="web" className={styles.secondary}>
-          Open alert
-        </Button>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com/templates?search=turborepo&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://turborepo.dev?utm_source=create-turbo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to turborepo.dev →
-        </a>
-      </footer>
+      {editEvent && (
+        <EventModal
+          date={new Date(editEvent.startTime)}
+          event={editEvent}
+          onClose={() => setEditEvent(null)}
+          onSave={handleUpdate}
+          onDelete={handleDelete}
+        />
+      )}
     </div>
-  );
+  )
 }

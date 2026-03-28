@@ -13,16 +13,20 @@ export class EventsService {
     private eventModel: Model<EventDocument>
   ) {}
 
-  async create(dto: CreateEventDto): Promise<Event> {
+  async create(dto: CreateEventDto): Promise<Event | undefined> {
+    if (!this.validateEvent(dto)) {
+      return
+    }
+
     const created = await this.eventModel.create({
       ...dto,
       id: this.generateId(),
     })
-    return this.cleanObject(created)
+    return this.cleanEvent(created)
   }
 
   async update(id: string, dto: UpdateEventDto): Promise<boolean> {
-    if (!this.validEventId(id)) {
+    if (!this.validEventId(id) || !this.validateEvent(dto)) {
       return false
     }
 
@@ -30,9 +34,23 @@ export class EventsService {
     return result.modifiedCount === 1
   }
 
+  private validateEvent(dto: CreateEventDto | UpdateEventDto) {
+    if (dto.startTime >= dto.endTime) {
+      return false
+    }
+    if (dto.title.length > 200 || dto.description.length > 4000) {
+      return false
+    }
+
+    dto.title = dto.title.trim()
+    dto.description = (dto.description ?? '').trim()
+
+    return true
+  }
+
   async findAll(): Promise<Event[]> {
     const found = await this.eventModel.find().lean().exec()
-    return found.map(obj => this.cleanObject(obj))
+    return found.map(obj => this.cleanEvent(obj))
   }
 
   async delete(id: string): Promise<boolean> {
@@ -44,9 +62,14 @@ export class EventsService {
     return result.deletedCount === 1
   }
 
-  private cleanObject(obj: Event): Event {
-    const { _id, ...rest } = obj as unknown as Record<string, unknown>
-    return rest as unknown as Event
+  async deleteAll(): Promise<boolean> {
+    await this.eventModel.deleteMany().lean().exec()
+    return true
+  }
+
+  private cleanEvent(event: Event): Event {
+    const { id, title, description, allDay, startTime, endTime, startZone, endZone, color } = event
+    return { id, title, description, allDay, startTime, endTime, startZone, endZone, color }
   }
 
   private generateId() {

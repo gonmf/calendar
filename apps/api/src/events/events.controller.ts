@@ -16,7 +16,7 @@ export class EventsController {
   @ApiResponse({ status: 200, type: Event })
   async create(@Body() dto: CreateEventDto) {
     const data = await this.eventsService.create(dto)
-    return { success: true, data }
+    return { success: !!data, data }
   }
 
   @Post('all')
@@ -35,6 +35,15 @@ export class EventsController {
   @ApiResponse({ status: 200, description: 'Event updated' })
   async update(@Param('id') id: string, @Body() dto: UpdateEventDto) {
     const success = await this.eventsService.update(id, dto)
+    return { success }
+  }
+
+  @Post('delete/all')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete all events' })
+  @ApiResponse({ status: 200, description: 'Events deleted' })
+  async deleteAll() {
+    const success = await this.eventsService.deleteAll()
     return { success }
   }
 

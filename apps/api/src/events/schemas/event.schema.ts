@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { ApiProperty } from '@nestjs/swagger'
 import { Document } from 'mongoose'
 
 export type EventDocument = Event & Document
@@ -14,17 +14,33 @@ export class Event {
   @Prop({ required: true })
   title: string
 
-  @ApiPropertyOptional()
+  @ApiProperty()
   @Prop()
-  description?: string
+  description: string
+
+  @ApiProperty({ example: true })
+  @Prop({ required: true })
+  allDay: boolean
 
   @ApiProperty({ example: 1767225600000 })
   @Prop({ required: true, index: true })
-  time: number
+  startTime: number
+
+  @ApiProperty({ example: 1767312000000 })
+  @Prop({ required: true, index: true })
+  endTime: number
+
+  @ApiProperty({ example: 'UTC' })
+  @Prop({ required: true })
+  startZone: string
 
   @ApiProperty({ example: 'Europe/Lisbon' })
   @Prop({ required: true })
-  zone: string
+  endZone: string
+
+  @ApiProperty()
+  @Prop({ required: true })
+  color: string
 }
 
 export const EventSchema = SchemaFactory.createForClass(Event)

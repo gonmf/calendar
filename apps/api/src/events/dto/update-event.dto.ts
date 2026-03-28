@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsString, IsOptional, IsDateString, IsInt, IsNotEmpty, Max, Min } from 'class-validator'
+import { IsString, IsInt, IsNotEmpty, Max, Min, IsBoolean, Length } from 'class-validator'
 
 export class UpdateEventDto {
   @ApiProperty({ example: 'Example event'})
@@ -9,18 +9,34 @@ export class UpdateEventDto {
 
   @ApiPropertyOptional()
   @IsString()
-  @IsNotEmpty()
-  @IsOptional()
-  description?: string
+  description: string
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  allDay: boolean
 
   @ApiProperty({ example: 1767225600000 })
   @IsInt()
   @Min(631152000000)
   @Max(3471292800000)
-  time: number
+  startTime: number
+
+  @ApiProperty({ example: 1767312000000 })
+  @IsInt()
+  @Min(631152000000)
+  @Max(3471292800000)
+  endTime: number
+
+  @ApiProperty({ example: 'UTC' })
+  @IsString()
+  startZone: string
 
   @ApiProperty({ example: 'Europe/Lisbon' })
   @IsString()
-  @IsNotEmpty()
-  zone: string
+  endZone: string
+
+  @ApiProperty({ example: '#0f9d58'})
+  @IsString()
+  @Length(7, 7)
+  color: string
 }
