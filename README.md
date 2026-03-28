@@ -6,3 +6,4 @@ TODO:
 - search toolbar
 - style improvements
 - add repeatable events
+- rate limits via redis
