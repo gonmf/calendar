@@ -3,30 +3,6 @@
 import { useEffect, useState } from 'react'
 import EventModal, { CalEvent, EventPayload } from '../components/EventModal'
 
-const btnStyle = {
-  background: 'transparent',
-  border: 'none',
-  cursor: 'pointer',
-  borderRadius: '50%',
-  width: 32,
-  height: 32,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 18,
-  color: '#70757a',
-}
-
-const todayBtnStyle = {
-  background: 'transparent',
-  border: '1px solid #dadce0',
-  borderRadius: 4,
-  padding: '8px 16px',
-  fontSize: 14,
-  cursor: 'pointer',
-  color: '#3c4043',
-}
-
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
 export default function CalendarPage() {
@@ -36,7 +12,7 @@ export default function CalendarPage() {
   const [editEvent, setEditEvent] = useState<CalEvent | null>(null)
 
   useEffect(() => {
-    fetch('http://localhost:3001/events/findAll', { method: 'POST' })
+    fetch('http://localhost:3001/events/all', { method: 'POST' })
       .then(r => r.json())
       .then(json => { if (json.success) setEvents(json.data) })
       .catch(() => {})
@@ -57,10 +33,8 @@ export default function CalendarPage() {
   events.forEach(ev => {
     const start = new Date(ev.startTime)
     const end = new Date(ev.endTime)
-
     const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate())
     const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-
     const cursor = new Date(startDay)
     while (cursor <= endDay) {
       if (cursor.getFullYear() === y && cursor.getMonth() === m) {
@@ -116,51 +90,193 @@ export default function CalendarPage() {
     setEditEvent(null)
   }
 
-  return (
-    <div style={{ fontFamily: 'Google Sans, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid #e0e0e0' }}>
-        <button onClick={() => setCurrent(new Date())} style={todayBtnStyle}>Today</button>
-        <button onClick={() => changeMonth(-1)} style={btnStyle}>&#8249;</button>
-        <button onClick={() => changeMonth(1)} style={btnStyle}>&#8250;</button>
-        <span style={{ fontSize: 20, fontWeight: 400 }}>{MONTHS[m]} {y}</span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
-        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
-          <div key={d} style={{ textAlign: 'center', fontSize: 11, color: '#70757a', padding: '8px 0', borderBottom: '1px solid #e0e0e0' }}>{d}</div>
-        ))}
-        {Array.from({ length: totalCells }, (_, i) => {
-          const offset = i - startDow
-          const isOther = offset < 0 || offset >= daysInMonth
-          const dayNum = offset < 0 ? daysInPrev + offset + 1 : offset >= daysInMonth ? offset - daysInMonth + 1 : offset + 1
-          const isToday = !isOther && dayNum === today.getDate() && m === today.getMonth() && y === today.getFullYear()
+  const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
 
-          return (
-            <div
-              key={i}
-              onClick={() => { if (!isOther) setModalDate(new Date(y, m, dayNum)) }}
-              style={{ minHeight: 100, borderRight: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0', padding: '4px 2px', cursor: isOther ? 'default' : 'pointer' }}
-            >
-              <div style={{
-                fontSize: 13, color: isOther ? '#ccc' : '#70757a', marginBottom: 4, padding: '0 2px',
-                ...(isToday ? { background: '#1a73e8', color: 'white', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500 } : {})
-              }}>{dayNum}</div>
-              {!isOther && (evByDay[dayNum] ?? []).map(ev => {
-                const start = new Date(ev.startTime)
-                const hh = String(start.getHours()).padStart(2, '0')
-                const mm = String(start.getMinutes()).padStart(2, '0')
-                return (
-                  <div
-                    key={ev.id}
-                    onClick={e => { e.stopPropagation(); setEditEvent(ev) }}
-                    style={{ fontSize: 11, padding: '2px 6px', borderRadius: 3, marginBottom: 2, background: ev.color || '#1a73e8', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
-                  >
-                    {ev.allDay ? 'All day' : `${hh}:${mm}`} {ev.title}
-                  </div>
-                )
-              })}
+  const hoverProps = (key: string) => ({
+    onMouseEnter: () => setHoveredBtn(key),
+    onMouseLeave: () => setHoveredBtn(null),
+  })
+
+  return (
+    <div style={{ fontFamily: 'Google Sans, Roboto, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column', background: '#f6f8fc' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 16px', borderBottom: '1px solid #dadce0', background: '#f6f8fc' }}>
+        {/* Today */}
+        <button
+          onClick={() => setCurrent(new Date())}
+          {...hoverProps('today')}
+          style={{
+            background: hoveredBtn === 'today' ? '#e8eaed' : 'transparent',
+            border: '1.5px solid #3c4043',
+            borderRadius: 24,
+            padding: '10px 22px',
+            fontSize: 15,
+            fontWeight: 500,
+            cursor: 'pointer',
+            color: '#3c4043',
+            fontFamily: 'inherit',
+            marginRight: 8,
+            transition: 'background 0.1s',
+          }}
+        >
+          Today
+        </button>
+
+        {/* Prev */}
+        <button
+          onClick={() => changeMonth(-1)}
+          {...hoverProps('prev')}
+          style={{
+            background: hoveredBtn === 'prev' ? '#e8eaed' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: '50%',
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#3c4043',
+            transition: 'background 0.1s',
+            padding: 0,
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+
+        {/* Next */}
+        <button
+          onClick={() => changeMonth(1)}
+          {...hoverProps('next')}
+          style={{
+            background: hoveredBtn === 'next' ? '#e8eaed' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: '50%',
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#3c4043',
+            transition: 'background 0.1s',
+            padding: 0,
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+        <span style={{ fontSize: 22, fontWeight: 400, color: '#3c4043', marginLeft: 8, flex: 1 }}>{MONTHS[m]} {y}</span>
+
+        {/* Search */}
+        <button
+          {...hoverProps('search')}
+          style={{
+            background: hoveredBtn === 'search' ? '#e8eaed' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: '50%',
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#3c4043',
+            transition: 'background 0.1s',
+          }}
+          title="Search"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Calendar */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }}>
+
+        {/* Day of week headers */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #dadce0' }}>
+          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
+            <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 500, color: '#70757a', padding: '10px 0', letterSpacing: '0.5px' }}>
+              {d.toUpperCase()}
             </div>
-          )
-        })}
+          ))}
+        </div>
+
+        {/* Day cells */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+          {Array.from({ length: totalCells }, (_, i) => {
+            const offset = i - startDow
+            const isOther = offset < 0 || offset >= daysInMonth
+            const dayNum = offset < 0 ? daysInPrev + offset + 1 : offset >= daysInMonth ? offset - daysInMonth + 1 : offset + 1
+            const isToday = !isOther && dayNum === today.getDate() && m === today.getMonth() && y === today.getFullYear()
+
+            return (
+              <div
+                key={i}
+                onClick={() => { if (!isOther) setModalDate(new Date(y, m, dayNum)) }}
+                style={{
+                  borderRight: '1px solid #dadce0',
+                  borderBottom: '1px solid #dadce0',
+                  padding: '6px 4px',
+                  cursor: isOther ? 'default' : 'pointer',
+                  minHeight: 110,
+                  background: isOther ? '#fafafa' : '#fff',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+                  <div style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: isOther ? '#c5c5c5' : isToday ? '#fff' : '#3c4043',
+                    width: 28,
+                    height: 28,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    background: isToday ? '#1a73e8' : 'transparent',
+                  }}>
+                    {dayNum}
+                  </div>
+                </div>
+                {!isOther && (evByDay[dayNum] ?? []).map(ev => {
+                  const start = new Date(ev.startTime)
+                  const hh = String(start.getHours()).padStart(2, '0')
+                  const mm = String(start.getMinutes()).padStart(2, '0')
+                  return (
+                    <div
+                      key={ev.id}
+                      onClick={e => { e.stopPropagation(); setEditEvent(ev) }}
+                      style={{
+                        fontSize: 12,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        marginBottom: 2,
+                        background: ev.color || '#1a73e8',
+                        color: 'white',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {ev.allDay ? 'All day' : `${hh}:${mm}`} {ev.title}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {modalDate && (
