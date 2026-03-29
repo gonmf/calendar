@@ -2,9 +2,35 @@
 
 import { useState, useEffect, useRef } from 'react'
 
-const TIMEZONES = [
-  'Europe/Lisbon', 'Europe/London', 'Europe/Paris',
-  'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', 'UTC'
+const TIMEZONES: string[] = [
+  'Pacific/Midway', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
+  'America/Tijuana', 'America/Denver', 'America/Phoenix', 'America/Chicago',
+  'America/Mexico_City', 'America/Regina', 'America/New_York', 'America/Bogota',
+  'America/Lima', 'America/Caracas', 'America/Halifax', 'America/Manaus',
+  'America/Santiago', 'America/La_Paz', 'America/St_Johns', 'America/Sao_Paulo',
+  'America/Argentina/Buenos_Aires', 'America/Montevideo', 'America/Godthab',
+  'Atlantic/South_Georgia', 'Atlantic/Azores', 'Atlantic/Cape_Verde',
+  'Europe/London', 'Europe/Lisbon', 'Africa/Monrovia', 'UTC',
+  'Europe/Amsterdam', 'Europe/Belgrade', 'Europe/Berlin', 'Europe/Brussels',
+  'Europe/Budapest', 'Europe/Copenhagen', 'Europe/Madrid', 'Europe/Paris',
+  'Europe/Prague', 'Europe/Rome', 'Europe/Stockholm', 'Europe/Vienna',
+  'Europe/Warsaw', 'Africa/Lagos', 'Africa/Tunis',
+  'Europe/Athens', 'Europe/Bucharest', 'Europe/Helsinki', 'Europe/Istanbul',
+  'Europe/Kiev', 'Europe/Riga', 'Europe/Sofia', 'Europe/Tallinn', 'Europe/Vilnius',
+  'Africa/Cairo', 'Africa/Harare', 'Africa/Johannesburg', 'Asia/Amman',
+  'Asia/Beirut', 'Asia/Jerusalem', 'Asia/Kuwait', 'Asia/Riyadh',
+  'Africa/Nairobi', 'Asia/Baghdad', 'Asia/Tehran',
+  'Asia/Baku', 'Asia/Muscat', 'Asia/Tbilisi', 'Asia/Yerevan', 'Asia/Kabul',
+  'Asia/Karachi', 'Asia/Tashkent', 'Asia/Kolkata', 'Asia/Colombo', 'Asia/Kathmandu',
+  'Asia/Almaty', 'Asia/Dhaka', 'Asia/Yekaterinburg', 'Asia/Rangoon',
+  'Asia/Bangkok', 'Asia/Jakarta', 'Asia/Krasnoyarsk', 'Asia/Novosibirsk',
+  'Asia/Hong_Kong', 'Asia/Kuala_Lumpur', 'Asia/Manila', 'Asia/Shanghai',
+  'Asia/Singapore', 'Asia/Taipei', 'Asia/Ulaanbaatar', 'Asia/Irkutsk',
+  'Asia/Seoul', 'Asia/Tokyo', 'Asia/Yakutsk',
+  'Australia/Adelaide', 'Australia/Darwin', 'Australia/Brisbane',
+  'Australia/Melbourne', 'Australia/Sydney', 'Australia/Hobart', 'Asia/Vladivostok',
+  'Pacific/Guam', 'Pacific/Port_Moresby', 'Asia/Magadan',
+  'Pacific/Auckland', 'Pacific/Fiji', 'Pacific/Tongatapu',
 ]
 
 const COLORS: string[] = [

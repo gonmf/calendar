@@ -246,7 +246,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #dadce0' }}>
           {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
-            <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 500, color: '#70757a', padding: '10px 0', letterSpacing: '0.5px' }}>
+            <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 500, color: '#3c4043', padding: '10px 0', letterSpacing: '0.5px' }}>
               {d.toUpperCase()}
             </div>
           ))}
@@ -301,6 +301,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                   const start = new Date(ev.startTime)
                   const hh = String(start.getHours()).padStart(2, '0')
                   const mm = String(start.getMinutes()).padStart(2, '0')
+                  const isPast = ev.endTime < today.getTime()
                   return (
                     <div
                       key={ev.id}
@@ -319,6 +320,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                         whiteSpace: 'nowrap',
                         cursor: 'pointer',
                         fontWeight: 500,
+                        opacity: isPast ? 0.45 : 1,
                       }}
                     >
                       {ev.allDay ? '' : `${hh}:${mm}`} {ev.title}
