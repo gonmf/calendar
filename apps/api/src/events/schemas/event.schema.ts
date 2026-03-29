@@ -10,6 +10,10 @@ export class Event {
   @Prop({ required: true, unique: true, index: true })
   id: string
 
+  @ApiProperty({ example: 'cal_eryu5rell9uwj825' })
+  @Prop({ required: true, index: true })
+  calId: string
+
   @ApiProperty({ example: 'Example event'})
   @Prop({ required: true })
   title: string

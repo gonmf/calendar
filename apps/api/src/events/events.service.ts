@@ -13,25 +13,82 @@ export class EventsService {
     private eventModel: Model<EventDocument>
   ) {}
 
-  async create(dto: CreateEventDto): Promise<Event | undefined> {
-    if (!this.validateEvent(dto)) {
+  async create(calId: string, dto: CreateEventDto): Promise<Event | undefined> {
+    if (!this.validCalendarId(calId) || !this.validateEvent(dto)) {
       return
     }
 
     const created = await this.eventModel.create({
       ...dto,
       id: this.generateId(),
+      calId,
     })
+
     return this.cleanEvent(created)
   }
 
-  async update(id: string, dto: UpdateEventDto): Promise<boolean> {
-    if (!this.validEventId(id) || !this.validateEvent(dto)) {
+  async update(calId: string, eventId: string, dto: UpdateEventDto): Promise<boolean> {
+    if (!this.validCalendarId(calId) || !this.validEventId(eventId) || !this.validateEvent(dto)) {
       return false
     }
 
-    const result = await this.eventModel.updateOne({ id }, { ...dto, id }).exec()
+    const result = await this.eventModel.updateOne({ calId, id: eventId }, dto).lean().exec()
     return result.modifiedCount === 1
+  }
+
+  async findAll(calId: string): Promise<Event[]> {
+    if (!this.validCalendarId(calId)) {
+      return []
+    }
+
+    const found = await this.eventModel.find({ calId }).lean().exec()
+    return found.map(obj => this.cleanEvent(obj))
+  }
+
+  async delete(calId: string, eventId: string): Promise<boolean> {
+    if (!this.validCalendarId(calId) || !this.validEventId(eventId)) {
+      return false
+    }
+
+    const result = await this.eventModel.deleteOne({ calId, id: eventId }).lean().exec()
+    return result.deletedCount === 1
+  }
+
+  async search(calId: string, query: string): Promise<Event[]> {
+    if (!this.validCalendarId(calId)) {
+      return []
+    }
+
+    return this.eventModel
+      .find({
+        calId,
+        title: { $regex: query, $options: 'i' }
+      })
+      .limit(8)
+      .lean()
+      .exec()
+  }
+
+  async deleteAll(): Promise<boolean> {
+    await this.eventModel.deleteMany().lean().exec()
+    return true
+  }
+
+  private cleanEvent(event: Event): Event {
+    const { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color } = event
+    return { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color }
+  }
+
+  private generateId() {
+    return `evt_${generateRandomString(16)}`
+  }
+
+  private validCalendarId(id: string) {
+    return id.length === 20 && id.startsWith('cal_')
+  }
+
+  private validEventId(id: string) {
+    return id.length === 20 && id.startsWith('evt_')
   }
 
   private validateEvent(dto: CreateEventDto | UpdateEventDto) {
@@ -46,37 +103,5 @@ export class EventsService {
     dto.description = (dto.description ?? '').trim()
 
     return true
-  }
-
-  async findAll(): Promise<Event[]> {
-    const found = await this.eventModel.find().lean().exec()
-    return found.map(obj => this.cleanEvent(obj))
-  }
-
-  async delete(id: string): Promise<boolean> {
-    if (!this.validEventId(id)) {
-      return false
-    }
-
-    const result = await this.eventModel.deleteOne({ id }).exec()
-    return result.deletedCount === 1
-  }
-
-  async deleteAll(): Promise<boolean> {
-    await this.eventModel.deleteMany().lean().exec()
-    return true
-  }
-
-  private cleanEvent(event: Event): Event {
-    const { id, title, description, allDay, startTime, endTime, startZone, endZone, color } = event
-    return { id, title, description, allDay, startTime, endTime, startZone, endZone, color }
-  }
-
-  private generateId() {
-    return `evt_${generateRandomString(16)}`
-  }
-
-  private validEventId(id: string) {
-    return id.length === 20 && id.startsWith('evt_')
   }
 }
