@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsString, IsInt, IsNotEmpty, Max, Min, IsBoolean, Length } from 'class-validator'
+import { IsString, IsInt, IsNotEmpty, Max, Min, IsBoolean, Length, IsOptional } from 'class-validator'
 
 export class UpdateEventDto {
   @ApiProperty({ example: 'Example event'})
@@ -39,4 +39,30 @@ export class UpdateEventDto {
   @IsString()
   @Length(7, 7)
   color: string
+
+  @ApiProperty()
+  @IsOptional()
+  recurring: boolean
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  recurrenceRule?: string
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @IsOptional()
+  recurrenceEnd?: number
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  recurringEventId?: string
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @IsOptional()
+  originalTime?: number
 }

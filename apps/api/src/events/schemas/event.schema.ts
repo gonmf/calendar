@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Document } from 'mongoose'
 
 export type EventDocument = Event & Document
@@ -45,6 +45,26 @@ export class Event {
   @ApiProperty()
   @Prop({ required: true })
   color: string
+
+  @ApiProperty()
+  @Prop({ required: true })
+  recurring: boolean
+
+  @ApiPropertyOptional()
+  @Prop()
+  recurrenceRule?: string
+
+  @ApiPropertyOptional()
+  @Prop()
+  recurrenceEnd?: number
+
+  @ApiPropertyOptional()
+  @Prop()
+  recurringEventId?: string
+
+  @ApiPropertyOptional()
+  @Prop()
+  originalTime?: number
 }
 
 export const EventSchema = SchemaFactory.createForClass(Event)

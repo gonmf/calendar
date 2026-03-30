@@ -2,5 +2,6 @@
 
 TODO:
 
-- add repeatable events
+- repeatable events
+- ical import/export
 - rate limits via redis

@@ -75,8 +75,8 @@ export class EventsService {
   }
 
   private cleanEvent(event: Event): Event {
-    const { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color } = event
-    return { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color }
+    const { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime } = event
+    return { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime }
   }
 
   private generateId() {

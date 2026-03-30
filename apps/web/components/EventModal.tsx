@@ -58,6 +58,11 @@ export interface EventPayload {
   startZone: string
   endZone: string
   color: string
+  recurring: boolean
+  recurrenceRule?: string
+  recurrenceEnd?: number
+  recurringEventId?: string
+  originalTime?: number
 }
 
 interface Props {
@@ -163,6 +168,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
       startZone: allDay ? 'UTC' : startZone,
       endZone: allDay ? 'UTC' : endZone,
       color,
+      recurring: false,
     })
     onClose()
   }

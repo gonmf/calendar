@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
-import { IsString, IsNotEmpty, IsInt, Min, Max, IsBoolean, Length } from "class-validator"
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { IsString, IsNotEmpty, IsInt, Min, Max, IsBoolean, Length, IsOptional } from "class-validator"
 
 export class CreateEventDto {
   @ApiProperty({ example: 'Example event'})
@@ -29,14 +29,42 @@ export class CreateEventDto {
 
   @ApiProperty({ example: 'UTC' })
   @IsString()
+  @IsNotEmpty()
   startZone: string
 
   @ApiProperty({ example: 'Europe/Lisbon' })
   @IsString()
+  @IsNotEmpty()
   endZone: string
 
   @ApiProperty({ example: '#0f9d58'})
   @IsString()
   @Length(7, 7)
   color: string
+
+  @ApiProperty()
+  @IsOptional()
+  recurring: boolean
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  recurrenceRule?: string
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @IsOptional()
+  recurrenceEnd?: number
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  recurringEventId?: string
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @IsOptional()
+  originalTime?: number
 }
