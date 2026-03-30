@@ -53,7 +53,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && searching) {
+      if (e.key === 'Escape' && searching && !editEvent && !modalDate) {
         setSearching(false)
         setSearchQuery('')
         setSearchResults([])
@@ -61,7 +61,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [searching])
+  }, [searching, editEvent, modalDate])
 
   const y = current.getFullYear()
   const m = current.getMonth()
@@ -155,6 +155,21 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search events..."
+                onFocus={async () => {
+                  if (searchQuery.trim() && searchResults.length === 0) {
+                    setSearchLoading(true)
+                    try {
+                      const res = await fetch(`http://localhost:3001/events/${calId}/search`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: searchQuery }),
+                      })
+                      const json = await res.json()
+                      if (json.success) setSearchResults(json.data)
+                    } catch(e) { console.error(e) }
+                    setSearchLoading(false)
+                  }
+                }}
                 style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, color: '#3c4043', background: 'transparent', fontFamily: 'inherit' }}
               />
               {searchLoading && <span style={{ fontSize: 12, color: '#70757a' }}>...</span>}
@@ -173,7 +188,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
               <div style={{ position: 'absolute', top: '100%', left: 16, right: 16, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(60,64,67,0.2)', zIndex: 100, overflow: 'hidden', border: '1px solid #dadce0' }}>
                 {searchResults.map(ev => {
                   const d = new Date(ev.startTime)
-                  const dEnd = new Date(ev.endTime - 1)
+                  const dEnd = new Date(ev.endTime)
                   const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
                   const formatTime = (date: Date) => date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
                   const isSameDay = d.getFullYear() === dEnd.getFullYear() && d.getMonth() === dEnd.getMonth() && d.getDate() === dEnd.getDate()
@@ -242,7 +257,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
       </div>
 
       {/* Calendar */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }} onClick={() => setSearchResults([])}>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #dadce0' }}>
           {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
@@ -255,7 +270,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
           {Array.from({ length: totalCells }, (_, i) => {
             const offset = i - startDow
-            const isOther = offset < 0 || offset >= daysInMonth
             const dayNum = offset < 0 ? daysInPrev + offset + 1 : offset >= daysInMonth ? offset - daysInMonth + 1 : offset + 1
 
             const cellDate = offset < 0
@@ -305,7 +319,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                   return (
                     <div
                       key={ev.id}
-                      onClick={e => { e.stopPropagation(); setEditEvent(ev) }}
+                      onClick={e => { e.stopPropagation(); setSearchResults([]); setEditEvent(ev) }}
                       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.88)')}
                       onMouseLeave={e => (e.currentTarget.style.filter = 'brightness(1)')}
                       style={{

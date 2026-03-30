@@ -47,6 +47,11 @@ export interface CalEvent {
   startZone: string
   endZone: string
   color: string
+  recurring: boolean
+  recurrenceRule?: string
+  recurrenceEnd?: number
+  recurringEventId?: string
+  originalTime?: number
 }
 
 export interface EventPayload {
@@ -114,7 +119,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
     event ? new Date(event.startTime) : new Date(date.getFullYear(), date.getMonth(), date.getDate(), now.getHours(), 0)
   )
   const [endDt, setEndDt] = useState(
-    event ? new Date(event.endTime - 1) : new Date(date.getFullYear(), date.getMonth(), date.getDate(), now.getHours() + 1, 0)
+    event ? new Date(event.endTime) : new Date(date.getFullYear(), date.getMonth(), date.getDate(), now.getHours() + 1, 0)
   )
   const [startZone, setStartZone] = useState(event?.startZone ?? 'Europe/Lisbon')
   const [endZone, setEndZone] = useState(event?.endZone ?? 'Europe/Lisbon')
@@ -163,7 +168,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
         ? new Date(startDt.getFullYear(), startDt.getMonth(), startDt.getDate(), 0, 0, 0, 0).getTime()
         : startDt.getTime(),
       endTime: allDay
-        ? new Date(endDt.getFullYear(), endDt.getMonth(), endDt.getDate() + 1, 0, 0, 0, 0).getTime()
+        ? new Date(endDt.getFullYear(), endDt.getMonth(), endDt.getDate(), 0, 0, 0, 0).getTime()
         : endDt.getTime(),
       startZone: allDay ? 'UTC' : startZone,
       endZone: allDay ? 'UTC' : endZone,
