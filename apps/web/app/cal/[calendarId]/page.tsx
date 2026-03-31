@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use, useRef } from 'react'
 import EventModal, { CalEvent, EventPayload } from '../../../components/EventModal'
+import { RRule } from 'rrule'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
@@ -73,21 +74,112 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   const daysInPrev = new Date(y, m, 0).getDate()
   const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7
 
+  // first and last visible cell dates
+  const firstCellDate = new Date(y, m, 1 - startDow)
+  const lastCellDate = new Date(y, m, 1 - startDow + totalCells - 1)
+
   const evByDate: Record<string, CalEvent[]> = {}
 
+  const addToDate = (date: Date, ev: CalEvent) => {
+    const key = dateKey(date)
+    if (!evByDate[key]) evByDate[key] = []
+    if (!evByDate[key].some(e => e.id === ev.id)) evByDate[key].push(ev)
+  }
+
   events.forEach(ev => {
-    const start = new Date(ev.startTime)
-    const end = new Date(ev.endTime)
-    const startDay = new Date(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
-    const endDay = new Date(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
-    if (endDay < startDay) return
-    const cursor = new Date(startDay)
-    console.log(ev)
-    while (cursor <= endDay) {
-      const key = dateKey(cursor)
-      if (!evByDate[key]) evByDate[key] = []
-      if (!evByDate[key].some(e => e.id === ev.id)) evByDate[key].push(ev)
-      cursor.setDate(cursor.getDate() + 1)
+    if (ev.recurring && ev.recurrenceRule) {
+      try {
+        let rule: RRule
+
+        if (ev.recurrenceRule.includes('DTSTART:')) {
+          const [dtstartPart, rrulePart] = ev.recurrenceRule.split(';RRULE:')
+          const ds = dtstartPart!.replace('DTSTART:', '').trim()
+          const dtstart = new Date(Date.UTC(
+            parseInt(ds.slice(0, 4)),
+            parseInt(ds.slice(4, 6)) - 1,
+            parseInt(ds.slice(6, 8)),
+            parseInt(ds.slice(9, 11)),
+            parseInt(ds.slice(11, 13)),
+            0
+          ))
+          rule = new RRule({
+            ...RRule.parseString(`RRULE:${rrulePart}`),
+            dtstart,
+          })
+        } else {
+          rule = RRule.fromString(
+            ev.recurrenceRule.startsWith('RRULE:')
+              ? ev.recurrenceRule
+              : `RRULE:${ev.recurrenceRule}`
+          )
+        }
+
+        // query range: first cell to day after last cell
+        const rangeStart = new Date(Date.UTC(firstCellDate.getFullYear(), firstCellDate.getMonth(), firstCellDate.getDate()))
+        const rangeEnd = new Date(Date.UTC(lastCellDate.getFullYear(), lastCellDate.getMonth(), lastCellDate.getDate() + 1))
+
+        const occurrences = rule.between(rangeStart, rangeEnd, true)
+        console.log('occurrences:', occurrences.map(o => `UTC: ${o.getUTCFullYear()}-${o.getUTCMonth()+1}-${o.getUTCDate()}`))
+
+        // duration in whole UTC days for all-day, ms for timed
+        const durationDays = ev.allDay
+          ? Math.round((ev.endTime - ev.startTime) / 86400000) || 1
+          : null
+        const durationMs = ev.allDay ? null : ev.endTime - ev.startTime
+
+        occurrences.forEach(occ => {
+          // rrule returns UTC dates — read as UTC
+          const oY = occ.getUTCFullYear()
+          const oM = occ.getUTCMonth()
+          const oD = occ.getUTCDate()
+          const oH = occ.getUTCHours()
+          const oMin = occ.getUTCMinutes()
+
+          let occStartTime: number
+          let occEndTime: number
+          let startDay: Date
+          let endDay: Date
+
+          if (ev.allDay) {
+            occStartTime = Date.UTC(oY, oM, oD)
+            occEndTime = Date.UTC(oY, oM, oD + durationDays!)
+            startDay = new Date(oY, oM, oD)
+            endDay = new Date(oY, oM, oD + durationDays! - 1)
+          } else {
+            occStartTime = new Date(oY, oM, oD, oH, oMin).getTime()
+            occEndTime = occStartTime + durationMs!
+            startDay = new Date(oY, oM, oD)
+            const occEnd = new Date(occEndTime)
+            endDay = new Date(occEnd.getFullYear(), occEnd.getMonth(), occEnd.getDate())
+          }
+
+          const occEvent: CalEvent = {
+            ...ev,
+            id: `${ev.id}+${occStartTime}`,
+            startTime: occStartTime,
+            endTime: occEndTime,
+          }
+
+          const cursor = new Date(startDay)
+          while (cursor <= endDay) {
+            addToDate(cursor, occEvent)
+            cursor.setDate(cursor.getDate() + 1)
+          }
+        })
+      } catch(e) {
+        console.error('Failed to expand recurrence rule', ev.recurrenceRule, e)
+      }
+    } else {
+      const start = new Date(ev.startTime)
+      const end = new Date(ev.endTime)
+      const startDay = new Date(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
+      const endDay = new Date(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
+      if (endDay < startDay) return
+      const cursor = new Date(startDay)
+      while (cursor <= endDay) {
+        addToDate(cursor, ev)
+        cursor.setDate(cursor.getDate() + 1)
+      }
     }
   })
 
@@ -102,7 +194,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   const handleCreate = async (payload: EventPayload) => {
     try {
-      console.log('SENDING', payload)
       const res = await fetch(`http://localhost:3001/events/${calId}/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,7 +235,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   return (
     <div style={{ fontFamily: 'Google Sans, Roboto, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column', background: '#f6f8fc' }}>
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 16px', borderBottom: '1px solid #dadce0', background: '#f6f8fc', position: 'relative' }}>
         {searching ? (
           <>
@@ -258,7 +348,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
         )}
       </div>
 
-      {/* Calendar */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }} onClick={() => setSearchResults([])}>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #dadce0' }}>
@@ -321,7 +410,13 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                   return (
                     <div
                       key={ev.id}
-                      onClick={e => { e.stopPropagation(); setSearchResults([]); setEditEvent(ev) }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        setSearchResults([])
+                        const originalId = ev.id.includes('+') ? ev.id.split('+')[0]! : ev.id
+                        const original = events.find(e => e.id === originalId) ?? ev
+                        setEditEvent(original)
+                      }}
                       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.88)')}
                       onMouseLeave={e => (e.currentTarget.style.filter = 'brightness(1)')}
                       style={{
@@ -337,6 +432,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                         cursor: 'pointer',
                         fontWeight: 500,
                         opacity: isPast ? 0.45 : 1,
+                        transition: 'filter 0.1s',
                       }}
                     >
                       {ev.allDay ? '' : `${hh}:${mm}`} {ev.title}

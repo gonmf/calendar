@@ -8,20 +8,54 @@ const FREQ_OPTIONS = ['day', 'week', 'month', 'year']
 
 interface Props {
   startDate: Date
+  initialRule?: string
   onClose: () => void
   onSave: (rule: string) => void
+}
+
+function parseRule(rule: string) {
+  const rrule = rule.includes(';RRULE:') ? rule.split(';RRULE:')[1]! : rule.replace('RRULE:', '')
+  const parts: Record<string, string> = {}
+  rrule.split(';').forEach(p => {
+    const [k, v] = p.split('=')
+    if (k && v) parts[k] = v
+  })
+
+  const freqMap: Record<string, 'day' | 'week' | 'month' | 'year'> = {
+    DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year'
+  }
+
+  const freq = freqMap[parts['FREQ'] ?? ''] ?? 'week'
+  const interval = parseInt(parts['INTERVAL'] ?? '1')
+  const byday = parts['BYDAY'] ? parts['BYDAY'].split(',') : null
+  const count = parts['COUNT'] ? parseInt(parts['COUNT']) : 13
+  const until = parts['UNTIL']
+
+  return { freq, interval, byday, count, until }
 }
 
 const formatDtstart = (d: Date) =>
   `DTSTART:${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}00`
 
-export default function RecurrenceModal({ startDate, onClose, onSave }: Props) {
-  const [interval, setInterval] = useState(1)
-  const [freq, setFreq] = useState<'day' | 'week' | 'month' | 'year'>('week')
-  const [selectedDays, setSelectedDays] = useState<string[]>([DAY_KEYS[startDate.getDay() === 0 ? 6 : startDate.getDay() - 1]!])
-  const [endsMode, setEndsMode] = useState<'never' | 'on' | 'after'>('never')
-  const [endDate, setEndDate] = useState(new Date(startDate.getFullYear(), startDate.getMonth() + 3, startDate.getDate()))
-  const [count, setCount] = useState(13)
+export default function RecurrenceModal({ startDate, initialRule, onClose, onSave }: Props) {
+  const parsed = initialRule ? parseRule(initialRule) : null
+
+  const defaultDay = DAY_KEYS[startDate.getDay() === 0 ? 6 : startDate.getDay() - 1]!
+
+  const [interval, setInterval] = useState(parsed?.interval ?? 1)
+  const [freq, setFreq] = useState<'day' | 'week' | 'month' | 'year'>(parsed?.freq ?? 'week')
+  const [selectedDays, setSelectedDays] = useState<string[]>(parsed?.byday ?? [defaultDay])
+  const [endsMode, setEndsMode] = useState<'never' | 'on' | 'after'>(
+    parsed?.until ? 'on' : parsed?.count ? 'after' : 'never'
+  )
+  const [endDate, setEndDate] = useState(() => {
+    if (parsed?.until) {
+      const u = parsed.until
+      return new Date(parseInt(u.slice(0,4)), parseInt(u.slice(4,6)) - 1, parseInt(u.slice(6,8)))
+    }
+    return new Date(startDate.getFullYear(), startDate.getMonth() + 3, startDate.getDate())
+  })
+  const [count, setCount] = useState(parsed?.count ?? 13)
 
   const toggleDay = (day: string) => {
     setSelectedDays(prev =>

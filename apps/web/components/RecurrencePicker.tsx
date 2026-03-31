@@ -30,11 +30,16 @@ function ruleLabel(rule: string, startDate: Date): string {
   const nth = NTH[Math.floor((startDate.getDate() - 1) / 7)]!
   const month = MONTHS_LONG[startDate.getMonth()]!
   const day = startDate.getDate()
+  const expectedDay = ['SU','MO','TU','WE','TH','FR','SA'][startDate.getDay()]!
+
   if (rrule === 'FREQ=DAILY') return 'Daily'
-  if (rrule.startsWith('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')) return 'Every weekday (Monday to Friday)'
-  if (rrule.startsWith('FREQ=WEEKLY')) return `Weekly on ${dow}`
-  if (rrule.startsWith('FREQ=MONTHLY')) return `Monthly on the ${nth} ${dow}`
-  if (rrule.startsWith('FREQ=YEARLY')) return `Annually on ${month} ${day}`
+  if (rrule === 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR') return 'Every weekday (Monday to Friday)'
+  if (rrule === `FREQ=WEEKLY;BYDAY=${expectedDay}`) return `Weekly on ${dow}`
+  if (rrule.startsWith('FREQ=WEEKLY')) return 'Custom'
+  if (rrule === 'FREQ=MONTHLY' || rrule.startsWith(`FREQ=MONTHLY;BYDAY=${nth.slice(0,2).toUpperCase()}${expectedDay}`)) return `Monthly on the ${nth} ${dow}`
+  if (rrule.startsWith('FREQ=MONTHLY')) return 'Custom'
+  if (rrule === 'FREQ=YEARLY') return `Annually on ${month} ${day}`
+  if (rrule.startsWith('FREQ=YEARLY')) return 'Custom'
   return 'Custom'
 }
 
@@ -112,6 +117,7 @@ export default function RecurrencePicker({ startDate, value, onChange }: Props) 
       {showModal && (
         <RecurrenceModal
           startDate={startDate}
+          initialRule={value}
           onClose={() => setShowModal(false)}
           onSave={rule => { onChange(rule); setShowModal(false) }}
         />

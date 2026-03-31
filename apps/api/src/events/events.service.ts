@@ -14,12 +14,7 @@ export class EventsService {
   ) {}
 
   async create(calId: string, dto: CreateEventDto): Promise<Event | undefined> {
-    if (!this.validCalendarId(calId)) {
-      console.log('invalid calendar ID')
-      return
-    }
-    if (!this.validateEvent(dto)) {
-      console.log('invalid event')
+    if (!this.validCalendarId(calId) || !this.validateEvent(dto)) {
       return
     }
 
@@ -89,42 +84,62 @@ export class EventsService {
   }
 
   private validCalendarId(id: string) {
-    return id.length === 20 && id.startsWith('cal_')
+    const ret = id.length === 20 && id.startsWith('cal_')
+    if (!ret) {
+      console.warn('invalid calendar ID')
+    }
+    return ret
   }
 
   private validEventId(id: string) {
-    return id.length === 20 && id.startsWith('evt_')
+    const ret = id.length === 20 && id.startsWith('evt_')
+    if (!ret) {
+      console.warn('invalid event ID')
+    }
+    return ret
   }
 
   private validateEvent(dto: CreateEventDto | UpdateEventDto) {
     if (dto.allDay) {
       if (dto.startTime > dto.endTime) {
+        console.warn('invalid end time before start time')
         return false
       }
       if ((dto.startTime % 86400000) !== 0) {
+        console.warn('invalid start time not lined to the day')
         return false
       }
       if ((dto.endTime % 86400000) !== 0) {
+        console.warn('invalid end time not lined to the day')
         return false
       }
     }
     if (!dto.allDay) {
       if (dto.startTime >= dto.endTime) {
+        console.warn('invalid start time not before end time')
         return false
       }
       if ((dto.startTime % 60000) !== 0) {
+        console.warn('invalid start time not lined up to the minute')
         return false
       }
       if ((dto.endTime % 60000) !== 0) {
+        console.warn('invalid end time not lined up to the minute')
         return false
       }
     }
-    if (dto.title.length > 200 || dto.description.length > 4000) {
+
+    dto.title = dto.title.trim()
+    if (dto.title.length > 200) {
+      console.warn('invalid title length too long')
       return false
     }
 
-    dto.title = dto.title.trim()
     dto.description = (dto.description ?? '').trim()
+    if (dto.description.length > 4000) {
+      console.warn('invalid description length too long')
+      return false
+    }
 
     return true
   }
