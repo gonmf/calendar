@@ -14,7 +14,12 @@ export class EventsService {
   ) {}
 
   async create(calId: string, dto: CreateEventDto): Promise<Event | undefined> {
-    if (!this.validCalendarId(calId) || !this.validateEvent(dto)) {
+    if (!this.validCalendarId(calId)) {
+      console.log('invalid calendar ID')
+      return
+    }
+    if (!this.validateEvent(dto)) {
+      console.log('invalid event')
       return
     }
 
@@ -92,8 +97,27 @@ export class EventsService {
   }
 
   private validateEvent(dto: CreateEventDto | UpdateEventDto) {
-    if (dto.startTime >= dto.endTime) {
-      return false
+    if (dto.allDay) {
+      if (dto.startTime > dto.endTime) {
+        return false
+      }
+      if ((dto.startTime % 86400000) !== 0) {
+        return false
+      }
+      if ((dto.endTime % 86400000) !== 0) {
+        return false
+      }
+    }
+    if (!dto.allDay) {
+      if (dto.startTime >= dto.endTime) {
+        return false
+      }
+      if ((dto.startTime % 60000) !== 0) {
+        return false
+      }
+      if ((dto.endTime % 60000) !== 0) {
+        return false
+      }
     }
     if (dto.title.length > 200 || dto.description.length > 4000) {
       return false

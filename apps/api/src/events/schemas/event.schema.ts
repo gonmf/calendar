@@ -22,6 +22,12 @@ export class Event {
   @Prop()
   description: string
 
+  /**
+   * On All Day events, a one day event has the same start and end times,
+   * lined up to the start of the day in UTC.
+   * On events with time, a 10:00 to 11:00 events should start at ms 600000
+   * and end at ms 660000 (added to the respective rest of the timestamp).
+   */
   @ApiProperty({ example: true })
   @Prop({ required: true })
   allDay: boolean

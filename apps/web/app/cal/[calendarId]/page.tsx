@@ -77,11 +77,12 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   events.forEach(ev => {
     const start = new Date(ev.startTime)
-    const end = new Date(ev.endTime - 1)
-    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate())
-    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+    const end = new Date(ev.endTime)
+    const startDay = new Date(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
+    const endDay = new Date(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
     if (endDay < startDay) return
     const cursor = new Date(startDay)
+    console.log(ev)
     while (cursor <= endDay) {
       const key = dateKey(cursor)
       if (!evByDate[key]) evByDate[key] = []
@@ -101,6 +102,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   const handleCreate = async (payload: EventPayload) => {
     try {
+      console.log('SENDING', payload)
       const res = await fetch(`http://localhost:3001/events/${calId}/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

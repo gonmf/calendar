@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import RecurrencePicker from './RecurrencePicker'
 
 const TIMEZONES: string[] = [
   'Pacific/Midway', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
@@ -139,6 +140,8 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
 
   useEffect(() => { setErrors([]) }, [title, description, startDt, endDt, allDay])
 
+  const [recurrenceRule, setRecurrenceRule] = useState(event?.recurrenceRule ?? '')
+
   const handleSave = () => {
     const trimmedTitle = title.trim()
     const trimmedDescription = description.trim()
@@ -148,14 +151,14 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
     if (trimmedTitle.length > 200) errs.push('Title must be 200 characters or fewer')
     if (trimmedDescription.length > 4000) errs.push('Description must be 4000 characters or fewer')
 
-    if (!allDay) {
-      if (isNaN(startDt.getTime())) errs.push('Start date is invalid')
-      if (isNaN(endDt.getTime())) errs.push('End date is invalid')
-      if (errs.length === 0 && endDt.getTime() <= startDt.getTime()) errs.push('End must be after start')
-    } else {
+    if (allDay) {
       if (isNaN(startDt.getTime())) errs.push('Start date is invalid')
       if (isNaN(endDt.getTime())) errs.push('End date is invalid')
       if (errs.length === 0 && endDt < startDt) errs.push('End date must be on or after start date')
+    } else {
+      if (isNaN(startDt.getTime())) errs.push('Start date is invalid')
+      if (isNaN(endDt.getTime())) errs.push('End date is invalid')
+      if (errs.length === 0 && endDt.getTime() <= startDt.getTime()) errs.push('End must be after start')
     }
 
     if (errs.length > 0) { setErrors(errs); return }
@@ -165,15 +168,16 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
       description: trimmedDescription,
       allDay,
       startTime: allDay
-        ? new Date(startDt.getFullYear(), startDt.getMonth(), startDt.getDate(), 0, 0, 0, 0).getTime()
+        ? new Date(Date.UTC(startDt.getFullYear(), startDt.getMonth(), startDt.getDate())).getTime()
         : startDt.getTime(),
       endTime: allDay
-        ? new Date(endDt.getFullYear(), endDt.getMonth(), endDt.getDate(), 0, 0, 0, 0).getTime()
+        ? new Date(Date.UTC(endDt.getFullYear(), endDt.getMonth(), endDt.getDate())).getTime()
         : endDt.getTime(),
       startZone: allDay ? 'UTC' : startZone,
       endZone: allDay ? 'UTC' : endZone,
       color,
-      recurring: false,
+      recurring: recurrenceRule !== '',
+      recurrenceRule: recurrenceRule || undefined,
     })
     onClose()
   }
@@ -214,7 +218,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: '#f6f8fc', borderRadius: 24, width: allDay ? 520 : 640, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', overflow: 'hidden', transition: 'width 0.15s' }}
+        style={{ background: '#f6f8fc', borderRadius: 24, width: allDay ? 520 : 640, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', transition: 'width 0.15s' }}
       >
 
         {/* Header */}
@@ -257,15 +261,22 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
           </div>
 
           {/* All day */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              id="allday"
-              checked={allDay}
-              onChange={e => setAllDay(e.target.checked)}
-              style={{ width: 16, height: 16, accentColor: '#1a73e8', cursor: 'pointer' }}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                id="allday"
+                checked={allDay}
+                onChange={e => setAllDay(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: '#1a73e8', cursor: 'pointer' }}
+              />
+              <label htmlFor="allday" style={{ fontSize: 14, cursor: 'pointer', color: '#3c4043' }}>All day</label>
+            </div>
+            <RecurrencePicker
+              startDate={allDay ? new Date(startDt.getFullYear(), startDt.getMonth(), startDt.getDate(), 0, 0, 0) : startDt}
+              value={recurrenceRule}
+              onChange={setRecurrenceRule}
             />
-            <label htmlFor="allday" style={{ fontSize: 14, cursor: 'pointer', color: '#3c4043' }}>All day</label>
           </div>
 
           {/* Date / time pickers */}
