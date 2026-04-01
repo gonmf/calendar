@@ -119,7 +119,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
         const rangeEnd = new Date(Date.UTC(lastCellDate.getFullYear(), lastCellDate.getMonth(), lastCellDate.getDate() + 1))
 
         const occurrences = rule.between(rangeStart, rangeEnd, true)
-        console.log('occurrences:', occurrences.map(o => `UTC: ${o.getUTCFullYear()}-${o.getUTCMonth()+1}-${o.getUTCDate()}`))
 
         // duration in whole UTC days for all-day, ms for timed
         const durationDays = ev.allDay

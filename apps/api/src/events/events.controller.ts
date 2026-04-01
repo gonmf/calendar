@@ -28,7 +28,7 @@ export class EventsController {
   @ApiResponse({ status: 200, type: [Event] })
   async findAll(@Param('calId') calId: string) {
     const data = await this.eventsService.findAll(calId)
-    return { success: true, data }
+    return { success: !!data, data: data ?? [] }
   }
 
   @Post(':calId/update/:eventId')
@@ -60,14 +60,5 @@ export class EventsController {
   async search(@Param('calId') calId: string, @Body() dto: SearchEventDto) {
     const data = await this.eventsService.search(calId, dto.query)
     return { success: true, data }
-  }
-
-  @Post('resetDb')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete all events' })
-  @ApiResponse({ status: 200, description: 'Events deleted' })
-  async resetDb() {
-    const success = await this.eventsService.deleteAll()
-    return { success }
   }
 }

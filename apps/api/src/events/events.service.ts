@@ -3,8 +3,8 @@ import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import { Event, EventDocument } from './schemas/event.schema'
 import { CreateEventDto } from './dto/create-event.dto'
-import { generateRandomString } from 'src/constants'
 import { UpdateEventDto } from './dto/update-event.dto'
+import { generateId, validateId } from 'src/ids'
 
 @Injectable()
 export class EventsService {
@@ -20,7 +20,7 @@ export class EventsService {
 
     const created = await this.eventModel.create({
       ...dto,
-      id: this.generateId(),
+      id: generateId('evt'),
       calId,
     })
 
@@ -36,9 +36,9 @@ export class EventsService {
     return result.modifiedCount === 1
   }
 
-  async findAll(calId: string): Promise<Event[]> {
+  async findAll(calId: string): Promise<Event[] | undefined> {
     if (!this.validCalendarId(calId)) {
-      return []
+      return undefined
     }
 
     const found = await this.eventModel.find({ calId }).lean().exec()
@@ -79,12 +79,8 @@ export class EventsService {
     return { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime }
   }
 
-  private generateId() {
-    return `evt_${generateRandomString(16)}`
-  }
-
   private validCalendarId(id: string) {
-    const ret = id.length === 20 && id.startsWith('cal_')
+    const ret = validateId('cal', id)
     if (!ret) {
       console.warn('invalid calendar ID')
     }
@@ -92,7 +88,7 @@ export class EventsService {
   }
 
   private validEventId(id: string) {
-    const ret = id.length === 20 && id.startsWith('evt_')
+    const ret = validateId('evt', id)
     if (!ret) {
       console.warn('invalid event ID')
     }
