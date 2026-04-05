@@ -4,7 +4,7 @@ import { Model } from 'mongoose'
 import { Event, EventDocument } from './schemas/event.schema'
 import { CreateEventDto } from './dto/create-event.dto'
 import { UpdateEventDto } from './dto/update-event.dto'
-import { generateId, validateId } from 'src/ids'
+import { generateEventId, validateCalendarId, validateEventId } from 'src/ids'
 
 @Injectable()
 export class EventsService {
@@ -20,7 +20,7 @@ export class EventsService {
 
     const created = await this.eventModel.create({
       ...dto,
-      id: generateId('evt'),
+      id: generateEventId(),
       calId,
     })
 
@@ -80,17 +80,17 @@ export class EventsService {
   }
 
   private validCalendarId(id: string) {
-    const ret = validateId('cal', id)
+    const ret = validateCalendarId(id)
     if (!ret) {
-      console.warn('invalid calendar ID')
+      console.warn('invalid calendar ID', id)
     }
     return ret
   }
 
   private validEventId(id: string) {
-    const ret = validateId('evt', id)
+    const ret = validateEventId(id)
     if (!ret) {
-      console.warn('invalid event ID')
+      console.warn('invalid event ID', id)
     }
     return ret
   }
@@ -98,42 +98,42 @@ export class EventsService {
   private validateEvent(dto: CreateEventDto | UpdateEventDto) {
     if (dto.allDay) {
       if (dto.startTime > dto.endTime) {
-        console.warn('invalid end time before start time')
+        console.warn('invalid end time before start time', { startTime: dto.startTime, endTime: dto.endTime })
         return false
       }
       if ((dto.startTime % 86400000) !== 0) {
-        console.warn('invalid start time not lined to the day')
+        console.warn('invalid start time not lined to the day', dto.startTime)
         return false
       }
       if ((dto.endTime % 86400000) !== 0) {
-        console.warn('invalid end time not lined to the day')
+        console.warn('invalid end time not lined to the day', dto.endTime)
         return false
       }
     }
     if (!dto.allDay) {
       if (dto.startTime >= dto.endTime) {
-        console.warn('invalid start time not before end time')
+        console.warn('invalid start time not before end time', { startTime: dto.startTime, endTime: dto.endTime })
         return false
       }
       if ((dto.startTime % 60000) !== 0) {
-        console.warn('invalid start time not lined up to the minute')
+        console.warn('invalid start time not lined up to the minute', dto.startTime)
         return false
       }
       if ((dto.endTime % 60000) !== 0) {
-        console.warn('invalid end time not lined up to the minute')
+        console.warn('invalid end time not lined up to the minute', dto.endTime)
         return false
       }
     }
 
     dto.title = dto.title.trim()
     if (dto.title.length > 200) {
-      console.warn('invalid title length too long')
+      console.warn('invalid title length too long', dto.title.length)
       return false
     }
 
     dto.description = (dto.description ?? '').trim()
     if (dto.description.length > 4000) {
-      console.warn('invalid description length too long')
+      console.warn('invalid description length too long', dto.description.length)
       return false
     }
 

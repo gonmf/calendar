@@ -29,8 +29,7 @@ function toBase62(buffer: Buffer, length: number): string {
   return result
 }
 
-function hmacSignature(input: string, length: number): string {
-  const secret = process.env.ID_SECRET
+function hmacSignature(secret: string, input: string, length: number): string {
   if (!secret) {
     throw 'illegal secret'
   }
@@ -38,25 +37,34 @@ function hmacSignature(input: string, length: number): string {
   return toBase62(hmac, length)
 }
 
-export function generateId(prefix: string): string {
+export function generateCalendarId(): string {
   const randomPart = generateRandomPart(10)
-  const signature = hmacSignature(randomPart, 6)
-  return `${prefix}_${randomPart}${signature}`
+  const signature = hmacSignature(process.env.CALENDAR_ID_SECRET ?? '', randomPart, 6)
+  return `${randomPart}${signature}`
 }
 
-export function validateId(prefix: string, id: string): boolean {
-  if (!id) {
-    return false
-  }
-  if (!id.startsWith(`${prefix}_`)) {
-    return false
-  }
-  const prefixLen = prefix.length
-  if (id.length - prefixLen - 1 !== 16) return false
+export function generateEventId(): string {
+  const randomPart = generateRandomPart(10)
+  const signature = hmacSignature(process.env.EVENT_ID_SECRET ?? '', randomPart, 6)
+  return `${randomPart}${signature}`
+}
 
-  const randomPart = id.slice(prefixLen + 1, 10 + prefixLen + 1)
-  const signature = id.slice(10 + prefixLen + 1)
+export function validateCalendarId(id: string): boolean {
+  if (!id || id.length !== 16) return false
 
-  const expected = hmacSignature(randomPart, 6)
+  const randomPart = id.slice(0, 10)
+  const signature = id.slice(10)
+
+  const expected = hmacSignature(process.env.CALENDAR_ID_SECRET ?? '', randomPart, 6)
+  return signature === expected
+}
+
+export function validateEventId(id: string): boolean {
+  if (!id || id.length !== 16) return false
+
+  const randomPart = id.slice(0, 10)
+  const signature = id.slice(10)
+
+  const expected = hmacSignature(process.env.EVENT_ID_SECRET ?? '', randomPart, 6)
   return signature === expected
 }

@@ -6,11 +6,11 @@ export type EventDocument = Event & Document
 
 @Schema({ id: false, virtuals: false, minimize: false, timestamps: false, versionKey: false, autoIndex: true })
 export class Event {
-  @ApiProperty({ example: 'evt_xjs09qf3h5m16f7t' })
+  @ApiProperty({ example: 'xjs09qf3h5m16f7t' })
   @Prop({ required: true, unique: true, index: true })
   id: string
 
-  @ApiProperty({ example: 'cal_eryu5rell9uwj825' })
+  @ApiProperty({ example: 'eryu5rell9uwj825' })
   @Prop({ required: true, index: true })
   calId: string
 

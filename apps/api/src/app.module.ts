@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { EventsModule } from './events/events.module';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CalendarsModule } from './events/calendars.module';
 import { DevModule } from './events/dev.module';
 import { ConfigModule } from '@nestjs/config';
+import { CalendarsModule } from './calendars/calendars.module';
 
 @Module({
   imports: [

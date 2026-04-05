@@ -3,6 +3,8 @@
 import { useEffect, useState, use, useRef } from 'react'
 import EventModal, { CalEvent, EventPayload } from '../../../components/EventModal'
 import { RRule } from 'rrule'
+import AccessGate from '../../../components/AccessGate'
+import { useSearchParams, useRouter } from 'next/navigation'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
@@ -11,7 +13,7 @@ const dateKey = (d: Date) =>
 
 export default function CalendarPage({ params }: { params: Promise<{ calendarId: string }> }) {
   const { calendarId } = use(params)
-  const calId = `cal_${calendarId.trim().slice(0, 16)}`
+  const calId = calendarId.trim()
   const [current, setCurrent] = useState(new Date())
   const [events, setEvents] = useState<CalEvent[]>([])
   const [modalDate, setModalDate] = useState<Date | null>(null)
@@ -22,6 +24,20 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   const [searchLoading, setSearchLoading] = useState(false)
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const [accessGranted, setAccessGranted] = useState(false)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const [showWelcome, setShowWelcome] = useState(false)
+
+  useEffect(() => {
+    if (!accessGranted) return
+    if (searchParams.get('new') === '1') {
+      setShowWelcome(true)
+      // remove the param from the URL without a reload
+      router.replace(`/cal/${calendarId}`)
+    }
+  }, [accessGranted])
 
   useEffect(() => {
     fetch(`http://localhost:3001/events/${calId}/all`, { method: 'POST' })
@@ -230,6 +246,26 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
     onMouseEnter: () => setHoveredBtn(key),
     onMouseLeave: () => setHoveredBtn(null),
   })
+
+  function CopyButton({ value }: { value: string }) {
+    const [copied, setCopied] = useState(false)
+    return (
+      <button
+        onClick={async () => {
+          await navigator.clipboard.writeText(value)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        }}
+        style={{ background: copied ? '#e6f4ea' : 'transparent', border: '1px solid #dadce0', borderRadius: 8, padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: copied ? '#0f9d58' : '#5f6368', fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+    )
+  }
+
+  if (!accessGranted) {
+    return <AccessGate calId={calId} onGranted={() => setAccessGranted(true)} />
+  }
 
   return (
     <div style={{ fontFamily: 'Google Sans, Roboto, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column', background: '#f6f8fc' }}>
@@ -460,6 +496,45 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
           onSave={handleUpdate}
           onDelete={handleDelete}
         />
+      )}
+
+      {showWelcome && (
+        <div onClick={() => setShowWelcome(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#f6f8fc', borderRadius: 24, width: 480, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', overflow: 'hidden' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0' }}>
+              <span style={{ fontSize: 18, fontWeight: 500, color: '#3c4043' }}>Calendar created</span>
+              <button
+                onClick={() => setShowWelcome(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#5f6368', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 24px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <p style={{ fontSize: 14, color: '#70757a', margin: 0 }}>
+                Save this ID — you'll need it to access your calendar from any device.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1, background: '#fff', border: '1px solid #dadce0', borderRadius: 8, padding: '10px 14px', fontFamily: 'monospace', fontSize: 14, color: '#3c4043' }}>
+                  {calendarId}
+                </div>
+                <CopyButton value={calendarId} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 24px 20px' }}>
+              <button
+                onClick={() => setShowWelcome(false)}
+                style={{ background: '#1a73e8', border: 'none', borderRadius: 24, padding: '10px 28px', fontSize: 14, cursor: 'pointer', color: 'white', fontWeight: 500, fontFamily: 'inherit' }}
+              >
+                Got it
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
     </div>
   )
