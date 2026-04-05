@@ -5,11 +5,50 @@ import EventModal, { CalEvent, EventPayload } from '../../../components/EventMod
 import { RRule } from 'rrule'
 import AccessGate from '../../../components/AccessGate'
 import { useSearchParams, useRouter } from 'next/navigation'
+import EVENT_COLORS from '../../../components/colors'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const CALENDARS_KEY = 'known_calendars'
 
 const dateKey = (d: Date) =>
   `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+
+interface ContextMenu {
+  ev: CalEvent
+  x: number
+  y: number
+}
+
+function getKnownCalendars(): { id: string, name: string }[] {
+  try {
+    return JSON.parse(localStorage.getItem(CALENDARS_KEY) ?? '[]')
+  } catch { return [] }
+}
+
+function saveKnownCalendar(id: string, name: string) {
+  try {
+    const existing = getKnownCalendars().filter(c => c.id !== id)
+    existing.push({ id, name })
+    existing.sort((a, b) => a.name.localeCompare(b.name))
+    localStorage.setItem(CALENDARS_KEY, JSON.stringify(existing))
+  } catch {}
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={async () => {
+        await navigator.clipboard.writeText(value)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }}
+      style={{ background: copied ? '#e6f4ea' : 'transparent', border: '1px solid #dadce0', borderRadius: 8, padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: copied ? '#0f9d58' : '#5f6368', fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+    >
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  )
+}
 
 export default function CalendarPage({ params }: { params: Promise<{ calendarId: string }> }) {
   const { calendarId } = use(params)
@@ -25,26 +64,42 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const [accessGranted, setAccessGranted] = useState(false)
+  const [calName, setCalName] = useState('')
+  const [knownCalendars, setKnownCalendars] = useState<{ id: string, name: string }[]>([])
   const searchParams = useSearchParams()
   const router = useRouter()
-
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.innerWidth >= 1024
+  })
+
+  useEffect(() => {
+    if (!accessGranted || !calName) return
+    saveKnownCalendar(calId, calName)
+    setKnownCalendars(getKnownCalendars())
+    if (searchParams.get('new') === '1') {
+      setShowWelcome(true)
+      router.replace(`/cal/${calendarId}`)
+    }
+  }, [accessGranted, calName])
+
+  useEffect(() => {
+    const handler = () => setContextMenu(null)
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') setContextMenu(null) }
+    window.addEventListener('click', handler)
+    window.addEventListener('keydown', keyHandler)
+    return () => { window.removeEventListener('click', handler); window.removeEventListener('keydown', keyHandler) }
+  }, [])
 
   useEffect(() => {
     if (!accessGranted) return
-    if (searchParams.get('new') === '1') {
-      setShowWelcome(true)
-      // remove the param from the URL without a reload
-      router.replace(`/cal/${calendarId}`)
-    }
-  }, [accessGranted])
-
-  useEffect(() => {
     fetch(`http://localhost:3001/events/${calId}/all`, { method: 'POST' })
       .then(r => r.json())
       .then(json => { if (json.success) setEvents(json.data) })
       .catch(() => {})
-  }, [calId])
+  }, [calId, accessGranted])
 
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return }
@@ -90,7 +145,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   const daysInPrev = new Date(y, m, 0).getDate()
   const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7
 
-  // first and last visible cell dates
   const firstCellDate = new Date(y, m, 1 - startDow)
   const lastCellDate = new Date(y, m, 1 - startDow + totalCells - 1)
 
@@ -106,7 +160,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
     if (ev.recurring && ev.recurrenceRule) {
       try {
         let rule: RRule
-
         if (ev.recurrenceRule.includes('DTSTART:')) {
           const [dtstartPart, rrulePart] = ev.recurrenceRule.split(';RRULE:')
           const ds = dtstartPart!.replace('DTSTART:', '').trim()
@@ -118,32 +171,19 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
             parseInt(ds.slice(11, 13)),
             0
           ))
-          rule = new RRule({
-            ...RRule.parseString(`RRULE:${rrulePart}`),
-            dtstart,
-          })
+          rule = new RRule({ ...RRule.parseString(`RRULE:${rrulePart}`), dtstart })
         } else {
-          rule = RRule.fromString(
-            ev.recurrenceRule.startsWith('RRULE:')
-              ? ev.recurrenceRule
-              : `RRULE:${ev.recurrenceRule}`
-          )
+          rule = RRule.fromString(ev.recurrenceRule.startsWith('RRULE:') ? ev.recurrenceRule : `RRULE:${ev.recurrenceRule}`)
         }
 
-        // query range: first cell to day after last cell
         const rangeStart = new Date(Date.UTC(firstCellDate.getFullYear(), firstCellDate.getMonth(), firstCellDate.getDate()))
         const rangeEnd = new Date(Date.UTC(lastCellDate.getFullYear(), lastCellDate.getMonth(), lastCellDate.getDate() + 1))
-
         const occurrences = rule.between(rangeStart, rangeEnd, true)
 
-        // duration in whole UTC days for all-day, ms for timed
-        const durationDays = ev.allDay
-          ? Math.round((ev.endTime - ev.startTime) / 86400000) || 1
-          : null
+        const durationDays = ev.allDay ? Math.round((ev.endTime - ev.startTime) / 86400000) || 1 : null
         const durationMs = ev.allDay ? null : ev.endTime - ev.startTime
 
         occurrences.forEach(occ => {
-          // rrule returns UTC dates — read as UTC
           const oY = occ.getUTCFullYear()
           const oM = occ.getUTCMonth()
           const oD = occ.getUTCDate()
@@ -242,34 +282,53 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
     setEditEvent(null)
   }
 
+  const handleContextDelete = async () => {
+    if (!contextMenu) return
+    const ev = contextMenu.ev
+    setContextMenu(null)
+    try {
+      await fetch(`http://localhost:3001/events/${calId}/delete/${ev.id}`, { method: 'POST' })
+      setEvents(prev => prev.filter(e => e.id !== ev.id))
+    } catch(e) { console.error(e) }
+  }
+
+  const handleContextColor = async (color: string) => {
+    if (!contextMenu) return
+    const ev = contextMenu.ev
+    setContextMenu(null)
+    try {
+      const res = await fetch(`http://localhost:3001/events/${calId}/updateColor/${ev.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color }),
+      })
+      const json = await res.json()
+      if (json.success) setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, color } : e))
+    } catch(e) { console.error(e) }
+  }
+
   const hoverProps = (key: string) => ({
     onMouseEnter: () => setHoveredBtn(key),
     onMouseLeave: () => setHoveredBtn(null),
   })
 
-  function CopyButton({ value }: { value: string }) {
-    const [copied, setCopied] = useState(false)
-    return (
-      <button
-        onClick={async () => {
-          await navigator.clipboard.writeText(value)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 2000)
-        }}
-        style={{ background: copied ? '#e6f4ea' : 'transparent', border: '1px solid #dadce0', borderRadius: 8, padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: copied ? '#0f9d58' : '#5f6368', fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
-      >
-        {copied ? 'Copied!' : 'Copy'}
-      </button>
-    )
+  if (!accessGranted) {
+    return <AccessGate calId={calId} onGranted={(name) => { setCalName(name); setAccessGranted(true) }} />
   }
 
-  if (!accessGranted) {
-    return <AccessGate calId={calId} onGranted={() => setAccessGranted(true)} />
+  let ctxX = 0
+  let ctxY = 0
+  if (contextMenu) {
+    const menuWidth = 180
+    const menuHeight = 200
+    ctxX = contextMenu.x + menuWidth > window.innerWidth ? contextMenu.x - menuWidth : contextMenu.x
+    ctxY = contextMenu.y + menuHeight > window.innerHeight ? contextMenu.y - menuHeight : contextMenu.y
   }
 
   return (
     <div style={{ fontFamily: 'Google Sans, Roboto, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column', background: '#f6f8fc' }}>
 
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 16px', borderBottom: '1px solid #dadce0', background: '#f6f8fc', position: 'relative' }}>
         {searching ? (
           <>
@@ -302,7 +361,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
               {searchLoading && <span style={{ fontSize: 12, color: '#70757a' }}>...</span>}
             </div>
             <button
-              onClick={() => { setSearching(false); setSearchQuery(''); setSearchResults([]) }}
+              onClick={() => { setContextMenu(null); setSearching(false); setSearchQuery(''); setSearchResults([]) }}
               {...hoverProps('close')}
               style={{ background: hoveredBtn === 'close' ? '#e8eaed' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3c4043', transition: 'background 0.1s', padding: 0, marginLeft: 4 }}
             >
@@ -344,6 +403,17 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
         ) : (
           <>
             <button
+              onClick={() => setSidebarOpen(prev => !prev)}
+              {...hoverProps('menu')}
+              style={{ background: hoveredBtn === 'menu' ? '#e8eaed' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3c4043', transition: 'background 0.1s', padding: 0, flexShrink: 0 }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+            <button
               onClick={() => setCurrent(new Date())}
               {...hoverProps('today')}
               style={{ background: hoveredBtn === 'today' ? '#e8eaed' : 'transparent', border: '1px solid #3c4043', borderRadius: 24, padding: '10px 22px', fontSize: 15, fontWeight: 500, cursor: 'pointer', color: '#3c4043', fontFamily: 'inherit', marginRight: 8, transition: 'background 0.1s' }}
@@ -370,7 +440,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
             </button>
             <span style={{ fontSize: 22, fontWeight: 400, color: '#3c4043', marginLeft: 8, flex: 1 }}>{MONTHS[m]} {y}</span>
             <button
-              onClick={() => setSearching(true)}
+              onClick={() => { setContextMenu(null); setSearching(true) }}
               {...hoverProps('search')}
               style={{ background: hoveredBtn === 'search' ? '#e8eaed' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3c4043', transition: 'background 0.1s', padding: 0 }}
               title="Search"
@@ -383,100 +453,170 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
         )}
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }} onClick={() => setSearchResults([])}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #dadce0' }}>
-          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
-            <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 500, color: '#3c4043', padding: '10px 0', letterSpacing: '0.5px' }}>
-              {d.toUpperCase()}
-            </div>
-          ))}
+        {/* Sidebar */}
+        <div style={{
+          width: sidebarOpen ? 240 : 0,
+          minWidth: sidebarOpen ? 240 : 0,
+          overflow: 'hidden',
+          transition: 'width 0.2s ease, min-width 0.2s ease',
+          background: '#f6f8fc',
+          borderRight: sidebarOpen ? '1px solid #dadce0' : 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: sidebarOpen ? '20px 16px' : 0,
+        }}>
+          {sidebarOpen && (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#1f1f1f', padding: '0 8px 12px', letterSpacing: '0.01em' }}>
+                My calendars
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {knownCalendars.map(cal => (
+                  <div
+                    key={cal.id}
+                    onClick={() => router.push(`/cal/${cal.id}`)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 8px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      color: cal.id === calId ? '#1a73e8' : '#3c4043',
+                      fontWeight: cal.id === calId ? 500 : 400,
+                      background: cal.id === calId ? '#e8f0fe' : 'transparent',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => { if (cal.id !== calId) e.currentTarget.style.background = '#e8eaed' }}
+                    onMouseLeave={e => { if (cal.id !== calId) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {cal.name}
+                    </span>
+                    <div
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        width: 16, height: 16, borderRadius: 3,
+                        border: `2px solid ${cal.id === calId ? '#1a73e8' : '#5f6368'}`,
+                        background: '#fff',
+                        flexShrink: 0, marginLeft: 8,
+                        cursor: 'default',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
-          {Array.from({ length: totalCells }, (_, i) => {
-            const offset = i - startDow
-            const dayNum = offset < 0 ? daysInPrev + offset + 1 : offset >= daysInMonth ? offset - daysInMonth + 1 : offset + 1
+        {/* Calendar */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }} onClick={() => setSearchResults([])}>
 
-            const cellDate = offset < 0
-              ? new Date(m === 0 ? y - 1 : y, m === 0 ? 11 : m - 1, dayNum)
-              : offset >= daysInMonth
-                ? new Date(m === 11 ? y + 1 : y, m === 11 ? 0 : m + 1, dayNum)
-                : new Date(y, m, dayNum)
-
-            const isToday = cellDate.getFullYear() === today.getFullYear() && cellDate.getMonth() === today.getMonth() && cellDate.getDate() === today.getDate()
-            const key = dateKey(cellDate)
-            const dayEvents = evByDate[key] ?? []
-
-            return (
-              <div
-                key={i}
-                onClick={() => setModalDate(cellDate)}
-                style={{
-                  borderRight: '1px solid #dadce0',
-                  borderBottom: '1px solid #dadce0',
-                  padding: '6px 4px',
-                  cursor: 'pointer',
-                  minHeight: 110,
-                  background: '#fff',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
-                  <div style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: isToday ? '#fff' : '#3c4043',
-                    width: 28,
-                    height: 28,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '50%',
-                    background: isToday ? '#1a73e8' : 'transparent',
-                  }}>
-                    {dayNum}
-                  </div>
-                </div>
-                {dayEvents.map(ev => {
-                  const start = new Date(ev.startTime)
-                  const hh = String(start.getHours()).padStart(2, '0')
-                  const mm = String(start.getMinutes()).padStart(2, '0')
-                  const isPast = ev.endTime < today.getTime()
-                  return (
-                    <div
-                      key={ev.id}
-                      onClick={e => {
-                        e.stopPropagation()
-                        setSearchResults([])
-                        const originalId = ev.id.includes('+') ? ev.id.split('+')[0]! : ev.id
-                        const original = events.find(e => e.id === originalId) ?? ev
-                        setEditEvent(original)
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.88)')}
-                      onMouseLeave={e => (e.currentTarget.style.filter = 'brightness(1)')}
-                      style={{
-                        fontSize: 13,
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        marginBottom: 2,
-                        background: ev.color || '#1a73e8',
-                        color: 'white',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer',
-                        fontWeight: 500,
-                        opacity: isPast ? 0.45 : 1,
-                        transition: 'filter 0.1s',
-                      }}
-                    >
-                      {ev.allDay ? '' : `${hh}:${mm}`} {ev.title}
-                    </div>
-                  )
-                })}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #dadce0' }}>
+            {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
+              <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 500, color: '#3c4043', padding: '10px 0', letterSpacing: '0.5px' }}>
+                {d.toUpperCase()}
               </div>
-            )
-          })}
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+            {Array.from({ length: totalCells }, (_, i) => {
+              const offset = i - startDow
+              const dayNum = offset < 0 ? daysInPrev + offset + 1 : offset >= daysInMonth ? offset - daysInMonth + 1 : offset + 1
+
+              const cellDate = offset < 0
+                ? new Date(m === 0 ? y - 1 : y, m === 0 ? 11 : m - 1, dayNum)
+                : offset >= daysInMonth
+                  ? new Date(m === 11 ? y + 1 : y, m === 11 ? 0 : m + 1, dayNum)
+                  : new Date(y, m, dayNum)
+
+              const isToday = cellDate.getFullYear() === today.getFullYear() && cellDate.getMonth() === today.getMonth() && cellDate.getDate() === today.getDate()
+              const key = dateKey(cellDate)
+              const dayEvents = evByDate[key] ?? []
+
+              return (
+                <div
+                  key={i}
+                  onClick={() => setModalDate(cellDate)}
+                  style={{
+                    borderRight: '1px solid #dadce0',
+                    borderBottom: '1px solid #dadce0',
+                    padding: '6px 4px',
+                    cursor: 'pointer',
+                    minHeight: 110,
+                    background: '#fff',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+                    <div style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: isToday ? '#fff' : '#3c4043',
+                      width: 28,
+                      height: 28,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      background: isToday ? '#1a73e8' : 'transparent',
+                    }}>
+                      {dayNum}
+                    </div>
+                  </div>
+                  {dayEvents.map(ev => {
+                    const start = new Date(ev.startTime)
+                    const hh = String(start.getHours()).padStart(2, '0')
+                    const mm = String(start.getMinutes()).padStart(2, '0')
+                    const isPast = ev.endTime < today.getTime()
+                    return (
+                      <div
+                        key={ev.id}
+                        onClick={e => {
+                          e.stopPropagation()
+                          setContextMenu(null)
+                          setSearchResults([])
+                          const originalId = ev.id.includes('+') ? ev.id.split('+')[0]! : ev.id
+                          const original = events.find(e => e.id === originalId) ?? ev
+                          setEditEvent(original)
+                        }}
+                        onContextMenu={e => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const originalId = ev.id.includes('+') ? ev.id.split('+')[0]! : ev.id
+                          const original = events.find(e => e.id === originalId) ?? ev
+                          setContextMenu({ ev: original, x: e.clientX, y: e.clientY })
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.88)')}
+                        onMouseLeave={e => (e.currentTarget.style.filter = 'brightness(1)')}
+                        style={{
+                          fontSize: 13,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          marginBottom: 2,
+                          background: ev.color || '#1a73e8',
+                          color: 'white',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                          opacity: isPast ? 0.45 : 1,
+                          transition: 'filter 0.1s',
+                        }}
+                      >
+                        {ev.allDay ? '' : `${hh}:${mm}`} {ev.title}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -501,21 +641,12 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
       {showWelcome && (
         <div onClick={() => setShowWelcome(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#f6f8fc', borderRadius: 24, width: 480, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', overflow: 'hidden' }}>
-
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0' }}>
               <span style={{ fontSize: 18, fontWeight: 500, color: '#3c4043' }}>Calendar created</span>
-              <button
-                onClick={() => setShowWelcome(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#5f6368', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                ✕
-              </button>
+              <button onClick={() => setShowWelcome(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#5f6368', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
-
             <div style={{ padding: '16px 24px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <p style={{ fontSize: 14, color: '#70757a', margin: 0 }}>
-                Save this ID — you'll need it to access your calendar from any device.
-              </p>
+              <p style={{ fontSize: 14, color: '#70757a', margin: 0 }}>Save this ID — you'll need it to access your calendar from any device.</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ flex: 1, background: '#fff', border: '1px solid #dadce0', borderRadius: 8, padding: '10px 14px', fontFamily: 'monospace', fontSize: 14, color: '#3c4043' }}>
                   {calendarId}
@@ -523,19 +654,60 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                 <CopyButton value={calendarId} />
               </div>
             </div>
-
             <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 24px 20px' }}>
-              <button
-                onClick={() => setShowWelcome(false)}
-                style={{ background: '#1a73e8', border: 'none', borderRadius: 24, padding: '10px 28px', fontSize: 14, cursor: 'pointer', color: 'white', fontWeight: 500, fontFamily: 'inherit' }}
-              >
+              <button onClick={() => setShowWelcome(false)} style={{ background: '#1a73e8', border: 'none', borderRadius: 24, padding: '10px 28px', fontSize: 14, cursor: 'pointer', color: 'white', fontWeight: 500, fontFamily: 'inherit' }}>
                 Got it
               </button>
             </div>
-
           </div>
         </div>
       )}
+
+      {contextMenu && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{ position: 'fixed', top: ctxY, left: ctxX, background: '#f6f8fc', borderRadius: 16, boxShadow: '0 8px 32px rgba(60,64,67,0.24)', border: '1px solid #dadce0', zIndex: 2000, minWidth: 160, overflow: 'hidden', fontFamily: 'Google Sans, Roboto, sans-serif' }}
+        >
+          <div style={{ padding: '8px 0' }}>
+            <div
+              onClick={handleContextDelete}
+              onMouseEnter={e => (e.currentTarget.style.background = '#e8eaed')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              style={{ padding: '12px 16px', fontSize: 15, fontWeight: 500, color: '#3c4043', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+              </svg>
+              Delete
+            </div>
+            <div style={{ padding: '8px 16px 12px' }}>
+              <div style={{ fontSize: 11, color: '#70757a', fontWeight: 500, marginBottom: 8 }}>Color</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[0, 1].map(row => (
+                  <div key={row} style={{ display: 'flex', gap: 6 }}>
+                    {EVENT_COLORS.slice(row * 6, row * 6 + 6).map(c => (
+                      <div
+                        key={c}
+                        onClick={() => handleContextColor(c)}
+                        style={{ width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: contextMenu.ev.color === c ? '2px solid #3c4043' : '2px solid transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s', flexShrink: 0 }}
+                        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
+                        onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                      >
+                        {contextMenu.ev.color === c && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

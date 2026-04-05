@@ -5,6 +5,8 @@ import { Event, EventDocument } from './schemas/event.schema'
 import { CreateEventDto } from './dto/create-event.dto'
 import { UpdateEventDto } from './dto/update-event.dto'
 import { generateEventId, validateCalendarId, validateEventId } from 'src/ids'
+import { UpdateEventColorDto } from './dto/update-event-color.dto'
+import { dot } from 'node:test/reporters'
 
 @Injectable()
 export class EventsService {
@@ -18,10 +20,24 @@ export class EventsService {
       return
     }
 
+    const { title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime } = dto
+
     const created = await this.eventModel.create({
-      ...dto,
       id: generateEventId(),
       calId,
+      title,
+      description,
+      allDay,
+      startTime,
+      endTime,
+      startZone,
+      endZone,
+      color,
+      recurring,
+      recurrenceRule,
+      recurrenceEnd,
+      recurringEventId,
+      originalTime
     })
 
     return this.cleanEvent(created)
@@ -32,7 +48,20 @@ export class EventsService {
       return false
     }
 
-    const result = await this.eventModel.updateOne({ calId, id: eventId }, dto).lean().exec()
+    const { title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime } = dto
+
+    const result = await this.eventModel.updateOne({ calId, id: eventId }, { title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime }).lean().exec()
+    return result.modifiedCount === 1
+  }
+
+  async updateColor(calId: string, eventId: string, dto: UpdateEventColorDto): Promise<boolean> {
+    if (!this.validCalendarId(calId) || !this.validEventId(eventId)) {
+      return false
+    }
+
+    const { color } = dto
+
+    const result = await this.eventModel.updateOne({ calId, id: eventId }, { color }).lean().exec()
     return result.modifiedCount === 1
   }
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 interface Props {
   calId: string
-  onGranted: () => void
+  onGranted: (name: string) => void
 }
 
 const fieldInputStyle: React.CSSProperties = {
@@ -74,7 +74,7 @@ export default function AccessGate({ calId, onGranted }: Props) {
       if (json.success) {
         storeToken(calId, json.token)
         setStatus('granted')
-        onGranted()
+        onGranted(json.name)
       } else if (json.reason === 'password_required' || json.reason === 'invalid_token') {
         clearToken(calId)
         setStatus('prompt')
@@ -96,7 +96,7 @@ export default function AccessGate({ calId, onGranted }: Props) {
       if (json.success) {
         storeToken(calId, json.token)
         setStatus('granted')
-        onGranted()
+        onGranted(json.name)
       } else if (json.reason === 'wrong_password') {
         setError('Incorrect password.')
       } else {

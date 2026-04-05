@@ -26,8 +26,8 @@ export class CalendarsController {
   @ApiResponse({ status: 401, description: 'Access denied' })
   async access(@Param('calId') calId: string, @Body() dto: AccessCalendarDto) {
     try {
-      const token = await this.calendarsService.access(calId, dto)
-      return { success: true, token }
+      const { token, name } = await this.calendarsService.access(calId, dto)
+      return { success: true, token, name }
     } catch (e) {
       if (e instanceof NotFoundException) {
         return { success: false, reason: 'Calendar not found' }

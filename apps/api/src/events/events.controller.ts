@@ -5,6 +5,7 @@ import { CreateEventDto } from './dto/create-event.dto'
 import { UpdateEventDto } from './dto/update-event.dto'
 import { SearchEventDto } from './dto/search-event.dto'
 import { CalendarsService } from 'src/calendars/calendars.service'
+import { UpdateEventColorDto } from './dto/update-event-color.dto'
 
 @ApiTags('events')
 @Controller('events')
@@ -46,6 +47,20 @@ export class EventsController {
   @ApiResponse({ status: 200, description: 'Event updated' })
   async update(@Param('calId') calId: string, @Param('eventId') eventId: string, @Body() dto: UpdateEventDto) {
     const success = await this.eventsService.update(calId, eventId, dto)
+    if (success) {
+      await this.calendarUpdated(calId)
+    }
+    return { success }
+  }
+
+  @Post(':calId/updateColor/:eventId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update an event' })
+  @ApiParam({ name: 'calId', type: String })
+  @ApiParam({ name: 'eventId', type: String })
+  @ApiResponse({ status: 200, description: 'Event updated' })
+  async updateColor(@Param('calId') calId: string, @Param('eventId') eventId: string, @Body() dto: UpdateEventColorDto) {
+    const success = await this.eventsService.updateColor(calId, eventId, dto)
     if (success) {
       await this.calendarUpdated(calId)
     }

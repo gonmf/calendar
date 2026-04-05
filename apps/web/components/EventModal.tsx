@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import RecurrencePicker from './RecurrencePicker'
+import EVENT_COLORS from './colors'
 
 const TIMEZONES: string[] = [
   'Pacific/Midway', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
@@ -32,10 +33,6 @@ const TIMEZONES: string[] = [
   'Australia/Melbourne', 'Australia/Sydney', 'Australia/Hobart', 'Asia/Vladivostok',
   'Pacific/Guam', 'Pacific/Port_Moresby', 'Asia/Magadan',
   'Pacific/Auckland', 'Pacific/Fiji', 'Pacific/Tongatapu',
-]
-
-const COLORS: string[] = [
-  '#d93025', '#e8a09a', '#f4511e', '#f6bf26', '#33b679', '#0b8043', '#039be5', '#3f51b5', '#7986cb', '#8e24aa', '#616161'
 ]
 
 export interface CalEvent {
@@ -124,7 +121,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
   )
   const [startZone, setStartZone] = useState(event?.startZone ?? 'Europe/Lisbon')
   const [endZone, setEndZone] = useState(event?.endZone ?? 'Europe/Lisbon')
-  const [color, setColor] = useState(event?.color ?? COLORS[0])
+  const [color, setColor] = useState(event?.color ?? EVENT_COLORS[0])
   const [errors, setErrors] = useState<string[]>([])
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
 
@@ -325,7 +322,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
           <div>
             <label style={labelStyle}>Color</label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {COLORS.map(c => (
+            {EVENT_COLORS.map(c => (
               <div
                 key={c}
                 onClick={() => setColor(c)}

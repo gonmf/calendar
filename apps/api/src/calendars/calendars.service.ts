@@ -41,7 +41,7 @@ export class CalendarsService {
     return { id: created.id, token }
   }
 
-  async access(calId: string, dto: AccessCalendarDto): Promise<string> {
+  async access(calId: string, dto: AccessCalendarDto): Promise<{ token: string, name: string }> {
     if (!validateCalendarId(calId)) {
       throw new NotFoundException('Calendar not found')
     }
@@ -52,7 +52,7 @@ export class CalendarsService {
 
     // no password required — issue token immediately
     if (!calendar.password) {
-      return this.issueToken(calId, null)
+      return { token: this.issueToken(calId, null), name: calendar.name }
     }
 
     // existing token provided — validate it
@@ -60,7 +60,7 @@ export class CalendarsService {
       try {
         const payload = await this.jwtService.verifyAsync(dto.token)
         if (payload.calId === calId && payload.passwordHash === calendar.password) {
-          return this.issueToken(calId, calendar.password)
+          return { token: this.issueToken(calId, calendar.password), name: calendar.name }
         }
       } catch {
         // token invalid or expired — fall through to password check
@@ -71,7 +71,7 @@ export class CalendarsService {
     if (dto.password) {
       const match = await bcrypt.compare(dto.password, calendar.password)
       if (match) {
-        return this.issueToken(calId, calendar.password)
+        return { token: this.issueToken(calId, calendar.password), name: calendar.name }
       }
       throw new UnauthorizedException('wrong_password')
     }
