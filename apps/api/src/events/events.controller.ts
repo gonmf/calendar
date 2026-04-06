@@ -6,6 +6,7 @@ import { UpdateEventDto } from './dto/update-event.dto'
 import { SearchEventDto } from './dto/search-event.dto'
 import { CalendarsService } from 'src/calendars/calendars.service'
 import { UpdateEventColorDto } from './dto/update-event-color.dto'
+import { uniq } from 'rambda'
 
 @ApiTags('events')
 @Controller('events')
@@ -34,9 +35,15 @@ export class EventsController {
   @ApiOperation({ summary: 'Fetch all events' })
   @ApiParam({ name: 'calId', type: String })
   @ApiResponse({ status: 200, description: 'All events' })
-  async findAll(@Param('calId') calId: string) {
-    const data = await this.eventsService.findAll(calId)
-    return { success: !!data, data: data ?? [] }
+  async findAll(@Param('calId') calIdsStr: string) {
+    const calIds = uniq(calIdsStr.split('_').map(s => s.trim()).filter(s => s))
+    if (calIds.length === 0) {
+      return { success: false, data: [] }
+    }
+
+    const events = await this.eventsService.findAll(calIds)
+
+    return { success: !!events, data: events ?? [] }
   }
 
   @Post(':calId/update/:eventId')
@@ -85,9 +92,14 @@ export class EventsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Search events' })
   @ApiParam({ name: 'calId', type: String })
-  async search(@Param('calId') calId: string, @Body() dto: SearchEventDto) {
-    const data = await this.eventsService.search(calId, dto.query)
-    return { success: true, data }
+  async search(@Param('calId') calIdsStr: string, @Body() dto: SearchEventDto) {
+    const calIds = uniq(calIdsStr.split('_').map(s => s.trim()).filter(s => s))
+    if (calIds.length === 0) {
+      return { success: false, data: [] }
+    }
+
+    const events = await this.eventsService.search(calIds, dto.query)
+    return { success: !!events, data: events ?? [] }
   }
 
   private async calendarUpdated(calId: string) {

@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from 'react'
 
+interface CalendarInfo {
+  id: string
+  name: string
+}
+
 interface Props {
-  calId: string
-  onGranted: (name: string) => void
+  calIds: string[]
+  onGranted: (results: CalendarInfo[]) => void
 }
 
 const fieldInputStyle: React.CSSProperties = {
@@ -45,19 +50,25 @@ function clearToken(calId: string) {
   } catch {}
 }
 
-export default function AccessGate({ calId, onGranted }: Props) {
-  const [status, setStatus] = useState<'checking' | 'prompt' | 'granted' | 'not_found'>('checking')
+export default function AccessGate({ calIds, onGranted }: Props) {
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [results, setResults] = useState<CalendarInfo[]>([])
+  const [currentName, setCurrentName] = useState<string | null>(null)
+  const [status, setStatus] = useState<'checking' | 'prompt' | 'not_found'>('checking')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
+
+  const currentCalId = calIds[currentIndex]!
+  const total = calIds.length
 
   const hover = (key: string) => ({
     onMouseEnter: () => setHoveredBtn(key),
     onMouseLeave: () => setHoveredBtn(null),
   })
 
-  const attemptAccess = async (payload: { password?: string, token?: string }) => {
+  const attemptAccess = async (calId: string, payload: { password?: string, token?: string }) => {
     const res = await fetch(`http://localhost:3001/calendars/${calId}/access`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -66,17 +77,32 @@ export default function AccessGate({ calId, onGranted }: Props) {
     return res.json()
   }
 
+  const advance = (name: string, token: string) => {
+    storeToken(currentCalId, token)
+    const newResults = [...results, { id: currentCalId, name }]
+    if (currentIndex + 1 === total) {
+      onGranted(newResults)
+    } else {
+      setResults(newResults)
+      setCurrentIndex(prev => prev + 1)
+      setPassword('')
+      setError('')
+      setStatus('checking')
+    }
+  }
+
   useEffect(() => {
+    setStatus('checking')
+    setCurrentName(null)
     const check = async () => {
-      const token = getStoredToken(calId)
-      const json = await attemptAccess(token ? { token } : {})
+      const token = getStoredToken(currentCalId)
+      const json = await attemptAccess(currentCalId, token ? { token } : {})
 
       if (json.success) {
-        storeToken(calId, json.token)
-        setStatus('granted')
-        onGranted(json.name)
+        advance(json.name, json.token)
       } else if (json.reason === 'password_required' || json.reason === 'invalid_token') {
-        clearToken(calId)
+        clearToken(currentCalId)
+        setCurrentName(null)
         setStatus('prompt')
       } else if (json.reason === 'Calendar not found') {
         setStatus('not_found')
@@ -85,18 +111,16 @@ export default function AccessGate({ calId, onGranted }: Props) {
       }
     }
     check()
-  }, [calId])
+  }, [currentIndex, currentCalId])
 
   const handleSubmit = async () => {
     if (!password.trim()) return
     setLoading(true)
     setError('')
     try {
-      const json = await attemptAccess({ password })
+      const json = await attemptAccess(currentCalId, { password })
       if (json.success) {
-        storeToken(calId, json.token)
-        setStatus('granted')
-        onGranted(json.name)
+        advance(json.name, json.token)
       } else if (json.reason === 'wrong_password') {
         setError('Incorrect password.')
       } else {
@@ -116,15 +140,15 @@ export default function AccessGate({ calId, onGranted }: Props) {
     )
   }
 
-  if (status === 'granted') return null
-
   if (status === 'not_found') {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f6f8fc', fontFamily: 'Google Sans, Roboto, sans-serif' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
           <div style={{ fontSize: 22, fontWeight: 500, color: '#3c4043', marginBottom: 8 }}>Calendar not found</div>
-          <div style={{ fontSize: 14, color: '#70757a', marginBottom: 24 }}>The calendar ID you entered does not exist.</div>
+          <div style={{ fontSize: 14, color: '#70757a', marginBottom: 24 }}>
+            The calendar <code style={{ background: '#f1f3f4', padding: '2px 6px', borderRadius: 4 }}>{currentCalId}</code> does not exist.
+          </div>
           <a href="/" style={{ fontSize: 14, color: '#1a73e8', textDecoration: 'none' }}>Go home</a>
         </div>
       </div>
@@ -135,8 +159,20 @@ export default function AccessGate({ calId, onGranted }: Props) {
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f6f8fc', fontFamily: 'Google Sans, Roboto, sans-serif' }}>
       <div style={{ background: '#fff', borderRadius: 24, width: 400, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.12)', padding: '32px 32px 24px' }}>
 
-        <div style={{ fontSize: 22, fontWeight: 500, color: '#3c4043', marginBottom: 6 }}>Enter password</div>
-        <div style={{ fontSize: 14, color: '#70757a', marginBottom: 24 }}>This calendar is password protected.</div>
+        {total > 1 && (
+          <div style={{ fontSize: 12, fontWeight: 500, color: '#70757a', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Calendar {currentIndex + 1} of {total}
+          </div>
+        )}
+
+        <div style={{ fontSize: 22, fontWeight: 500, color: '#3c4043', marginBottom: 6 }}>
+          {currentName ?? 'Enter password'}
+        </div>
+        <div style={{ fontSize: 14, color: '#70757a', marginBottom: 24 }}>
+          {total > 1
+            ? `This calendar is password protected.`
+            : 'This calendar is password protected.'}
+        </div>
 
         <div style={{ marginBottom: 16 }}>
           <input
@@ -169,7 +205,7 @@ export default function AccessGate({ calId, onGranted }: Props) {
               transition: 'background 0.1s',
             }}
           >
-            {loading ? 'Checking...' : 'Continue'}
+            {loading ? 'Checking...' : currentIndex + 1 < total ? 'Next' : 'Continue'}
           </button>
         </div>
 

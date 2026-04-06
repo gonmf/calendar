@@ -6,7 +6,6 @@ import { CreateEventDto } from './dto/create-event.dto'
 import { UpdateEventDto } from './dto/update-event.dto'
 import { generateEventId, validateCalendarId, validateEventId } from 'src/ids'
 import { UpdateEventColorDto } from './dto/update-event-color.dto'
-import { dot } from 'node:test/reporters'
 
 @Injectable()
 export class EventsService {
@@ -65,12 +64,14 @@ export class EventsService {
     return result.modifiedCount === 1
   }
 
-  async findAll(calId: string): Promise<Event[] | undefined> {
-    if (!this.validCalendarId(calId)) {
+  async findAll(calIds: string[]): Promise<Event[] | undefined> {
+    if (calIds.length === 0 || calIds.some(calId => !this.validCalendarId(calId))) {
       return undefined
     }
 
-    const found = await this.eventModel.find({ calId }).lean().exec()
+    const found = await this.eventModel.find({
+      ...(calIds.length === 1 ? { calId: calIds[0] } : { calId: { $in: calIds }})
+    }).lean().exec()
     return found.map(obj => this.cleanEvent(obj))
   }
 
@@ -83,15 +84,16 @@ export class EventsService {
     return result.deletedCount === 1
   }
 
-  async search(calId: string, query: string): Promise<Event[]> {
-    if (!this.validCalendarId(calId)) {
-      return []
+  async search(calIds: string[], query: string): Promise<Event[] | undefined> {
+    if (calIds.some(calId => !this.validCalendarId(calId))) {
+      return undefined
     }
 
     return this.eventModel
       .find({
-        calId,
-        title: { $regex: query, $options: 'i' }
+        ...(calIds.length === 1 ? { calId: calIds[0] } : { calId: { $in: calIds } }),
+        title: { $regex: query, $options: 'i' },
+        recurringEventId: null,
       })
       .limit(8)
       .lean()

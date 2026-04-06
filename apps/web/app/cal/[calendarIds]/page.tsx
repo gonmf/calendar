@@ -19,7 +19,12 @@ interface ContextMenu {
   y: number
 }
 
-function getKnownCalendars(): { id: string, name: string }[] {
+interface CalendarInfo {
+  id: string
+  name: string
+}
+
+function getKnownCalendars(): CalendarInfo[] {
   try {
     return JSON.parse(localStorage.getItem(CALENDARS_KEY) ?? '[]')
   } catch { return [] }
@@ -50,9 +55,11 @@ function CopyButton({ value }: { value: string }) {
   )
 }
 
-export default function CalendarPage({ params }: { params: Promise<{ calendarId: string }> }) {
-  const { calendarId } = use(params)
-  const calId = calendarId.trim()
+export default function CalendarPage({ params }: { params: Promise<{ calendarIds: string }> }) {
+  const { calendarIds } = use(params)
+  const calIdList = calendarIds.split('_').map(id => id.trim()).sort()
+  const primaryCalId = calIdList[0]!
+
   const [current, setCurrent] = useState(new Date())
   const [events, setEvents] = useState<CalEvent[]>([])
   const [modalDate, setModalDate] = useState<Date | null>(null)
@@ -63,9 +70,9 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   const [searchLoading, setSearchLoading] = useState(false)
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const [grantedCalendars, setGrantedCalendars] = useState<CalendarInfo[]>([])
   const [accessGranted, setAccessGranted] = useState(false)
-  const [calName, setCalName] = useState('')
-  const [knownCalendars, setKnownCalendars] = useState<{ id: string, name: string }[]>([])
+  const [knownCalendars, setKnownCalendars] = useState<CalendarInfo[]>([])
   const searchParams = useSearchParams()
   const router = useRouter()
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
@@ -76,14 +83,14 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   })
 
   useEffect(() => {
-    if (!accessGranted || !calName) return
-    saveKnownCalendar(calId, calName)
+    if (!accessGranted) return
+    grantedCalendars.forEach(cal => saveKnownCalendar(cal.id, cal.name))
     setKnownCalendars(getKnownCalendars())
     if (searchParams.get('new') === '1') {
       setShowWelcome(true)
-      router.replace(`/cal/${calendarId}`)
+      router.replace(`/cal/${calendarIds}`)
     }
-  }, [accessGranted, calName])
+  }, [accessGranted])
 
   useEffect(() => {
     const handler = () => setContextMenu(null)
@@ -95,18 +102,19 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   useEffect(() => {
     if (!accessGranted) return
-    fetch(`http://localhost:3001/events/${calId}/all`, { method: 'POST' })
+
+    fetch(`http://localhost:3001/events/${calIdList.join('_')}/all`, { method: 'POST' })
       .then(r => r.json())
       .then(json => { if (json.success) setEvents(json.data) })
       .catch(() => {})
-  }, [calId, accessGranted])
+  }, [calIdList.join('_'), accessGranted])
 
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return }
     const timer = setTimeout(async () => {
       setSearchLoading(true)
       try {
-        const res = await fetch(`http://localhost:3001/events/${calId}/search`, {
+        const res = await fetch(`http://localhost:3001/events/${calIdList.join('_')}/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: searchQuery }),
@@ -117,7 +125,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
       setSearchLoading(false)
     }, 350)
     return () => clearTimeout(timer)
-  }, [searchQuery, calId])
+  }, [searchQuery, calIdList.join('_')])
 
   useEffect(() => {
     if (searching) searchRef.current?.focus()
@@ -247,9 +255,13 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   const changeMonth = (dir: number) => setCurrent(new Date(y, m + dir, 1))
 
+  // find which calendar an event belongs to by its calId field
+  const getEventCalId = (ev: CalEvent): string =>
+    calIdList.find(id => ev.id === id) ?? primaryCalId
+
   const handleCreate = async (payload: EventPayload) => {
     try {
-      const res = await fetch(`http://localhost:3001/events/${calId}/create`, {
+      const res = await fetch(`http://localhost:3001/events/${primaryCalId}/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -261,8 +273,9 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   const handleUpdate = async (payload: EventPayload) => {
     if (!editEvent) return
+    const evCalId = getEventCalId(editEvent)
     try {
-      const res = await fetch(`http://localhost:3001/events/${calId}/update/${editEvent.id}`, {
+      const res = await fetch(`http://localhost:3001/events/${evCalId}/update/${editEvent.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -275,8 +288,9 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
 
   const handleDelete = async () => {
     if (!editEvent) return
+    const evCalId = getEventCalId(editEvent)
     try {
-      await fetch(`http://localhost:3001/events/${calId}/delete/${editEvent.id}`, { method: 'POST' })
+      await fetch(`http://localhost:3001/events/${evCalId}/delete/${editEvent.id}`, { method: 'POST' })
       setEvents(prev => prev.filter(e => e.id !== editEvent.id))
     } catch(e) { console.error(e) }
     setEditEvent(null)
@@ -285,9 +299,10 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   const handleContextDelete = async () => {
     if (!contextMenu) return
     const ev = contextMenu.ev
+    const evCalId = getEventCalId(ev)
     setContextMenu(null)
     try {
-      await fetch(`http://localhost:3001/events/${calId}/delete/${ev.id}`, { method: 'POST' })
+      await fetch(`http://localhost:3001/events/${evCalId}/delete/${ev.id}`, { method: 'POST' })
       setEvents(prev => prev.filter(e => e.id !== ev.id))
     } catch(e) { console.error(e) }
   }
@@ -295,9 +310,10 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   const handleContextColor = async (color: string) => {
     if (!contextMenu) return
     const ev = contextMenu.ev
+    const evCalId = getEventCalId(ev)
     setContextMenu(null)
     try {
-      const res = await fetch(`http://localhost:3001/events/${calId}/updateColor/${ev.id}`, {
+      const res = await fetch(`http://localhost:3001/events/${evCalId}/update/${ev.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ color }),
@@ -307,13 +323,33 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
     } catch(e) { console.error(e) }
   }
 
+  const toggleCalendar = (id: string) => {
+    const current = new Set(calIdList)
+    if (current.has(id)) {
+      if (current.size === 1) return
+      current.delete(id)
+    } else {
+      current.add(id)
+    }
+    const sorted = Array.from(current).sort().join('_')
+    router.push(`/cal/${sorted}`)
+  }
+
   const hoverProps = (key: string) => ({
     onMouseEnter: () => setHoveredBtn(key),
     onMouseLeave: () => setHoveredBtn(null),
   })
 
   if (!accessGranted) {
-    return <AccessGate calId={calId} onGranted={(name) => { setCalName(name); setAccessGranted(true) }} />
+    return (
+      <AccessGate
+        calIds={calIdList}
+        onGranted={(results) => {
+          setGrantedCalendars(results)
+          setAccessGranted(true)
+        }}
+      />
+    )
   }
 
   let ctxX = 0
@@ -328,7 +364,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
   return (
     <div style={{ fontFamily: 'Google Sans, Roboto, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column', background: '#f6f8fc' }}>
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 16px', borderBottom: '1px solid #dadce0', background: '#f6f8fc', position: 'relative' }}>
         {searching ? (
           <>
@@ -345,7 +380,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
                   if (searchQuery.trim() && searchResults.length === 0) {
                     setSearchLoading(true)
                     try {
-                      const res = await fetch(`http://localhost:3001/events/${calId}/search`, {
+                      const res = await fetch(`http://localhost:3001/events/${calIdList.join('_')}/search`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ query: searchQuery }),
@@ -469,45 +504,74 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
         }}>
           {sidebarOpen && (
             <>
-              <div style={{ fontSize: 16, fontWeight: 600, color: '#1f1f1f', padding: '0 8px 12px', letterSpacing: '0.01em' }}>
-                My calendars
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px 8px', marginBottom: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#444746', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                  My calendars
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {knownCalendars.map(cal => (
-                  <div
-                    key={cal.id}
-                    onClick={() => router.push(`/cal/${cal.id}`)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 8px',
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      color: cal.id === calId ? '#1a73e8' : '#3c4043',
-                      fontWeight: cal.id === calId ? 500 : 400,
-                      background: cal.id === calId ? '#e8f0fe' : 'transparent',
-                      transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={e => { if (cal.id !== calId) e.currentTarget.style.background = '#e8eaed' }}
-                    onMouseLeave={e => { if (cal.id !== calId) e.currentTarget.style.background = 'transparent' }}
-                  >
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                      {cal.name}
-                    </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {knownCalendars.map(cal => {
+                  const isActive = calIdList.includes(cal.id)
+                  const isOnly = calIdList.length === 1 && isActive
+                  const isHovered = hoveredBtn === `cal-${cal.id}`
+                  return (
                     <div
-                      onClick={e => e.stopPropagation()}
+                      key={cal.id}
+                      onMouseEnter={() => setHoveredBtn(`cal-${cal.id}`)}
+                      onMouseLeave={() => setHoveredBtn(null)}
                       style={{
-                        width: 16, height: 16, borderRadius: 3,
-                        border: `2px solid ${cal.id === calId ? '#1a73e8' : '#5f6368'}`,
-                        background: '#fff',
-                        flexShrink: 0, marginLeft: 8,
-                        cursor: 'default',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '4px 8px',
+                        borderRadius: 20,
+                        cursor: 'pointer',
+                        background: isHovered ? '#e8eaed' : 'transparent',
+                        transition: 'background 0.1s',
+                        gap: 12,
                       }}
-                    />
-                  </div>
-                ))}
+                    >
+                      {/* checkbox */}
+                      <div
+                        onClick={e => { e.stopPropagation(); if (!isOnly) toggleCalendar(cal.id) }}
+                        style={{
+                          width: 18, height: 18, borderRadius: 3,
+                          border: `2px solid ${isActive ? '#1a73e8' : '#5f6368'}`,
+                          background: isActive ? '#1a73e8' : '#fff',
+                          flexShrink: 0,
+                          cursor: isOnly ? 'not-allowed' : 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          transition: 'background 0.1s, border-color 0.1s',
+                        }}
+                      >
+                        {isActive && (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* name */}
+                      <span
+                        onClick={() => router.push(`/cal/${cal.id}`)}
+                        style={{ flex: 1, fontSize: 14, color: '#3c4043', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', userSelect: 'none' }}
+                      >
+                        {cal.name}
+                      </span>
+
+                      {/* options icon — only on hover */}
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'default', visibility: isHovered ? 'visible' : 'hidden' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#dadce0')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#5f6368' }}>
+                          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+                        </svg>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </>
           )}
@@ -649,9 +713,9 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarId:
               <p style={{ fontSize: 14, color: '#70757a', margin: 0 }}>Save this ID — you'll need it to access your calendar from any device.</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ flex: 1, background: '#fff', border: '1px solid #dadce0', borderRadius: 8, padding: '10px 14px', fontFamily: 'monospace', fontSize: 14, color: '#3c4043' }}>
-                  {calendarId}
+                  {primaryCalId}
                 </div>
-                <CopyButton value={calendarId} />
+                <CopyButton value={primaryCalId} />
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 24px 20px' }}>

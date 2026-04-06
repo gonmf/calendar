@@ -24,6 +24,7 @@
   ],
   "dependencies": {
     "@nestjs/jwt": "^11.0.2",
-    "bcrypt": "^6.0.0"
+    "bcrypt": "^6.0.0",
+    "rambda": "^11.1.0"
   }
 }
