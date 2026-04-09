@@ -10,6 +10,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Calendar API')
+    .addBearerAuth()
     .setDescription('API documentation')
     .setVersion('1.0')
     .build()
