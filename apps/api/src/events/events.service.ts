@@ -105,6 +105,12 @@ export class EventsService {
     return true
   }
 
+  async deleteCalendarEvents(calendarIds: string[]) {
+    if (calendarIds.length) {
+      await this.eventModel.deleteMany({ calId: { $in: calendarIds }}).lean().exec()
+    }
+  }
+
   private cleanEvent(event: Event): Event {
     const { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime } = event
     return { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime }

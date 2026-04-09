@@ -6,11 +6,6 @@ import { useRouter } from 'next/navigation'
 const ADJECTIVES = ['swift','brave','calm','dark','bold','wise','bright','sharp','quiet','wild','grand','vast','deep','warm','cool','soft','rough','keen','pure','true','jade','iron','gold','stone','cloud','frost','ember','dawn','dusk','storm']
 const NOUNS = ['fox','owl','pine','lake','wolf','hawk','reed','moss','fern','tide','crag','vale','peak','gale','tern','wren','lark','dove','kite','swan','elm','oak','ash','yew','bay','cape','isle','moor','fen','glen']
 
-function generatePhrase(): string {
-  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]!
-  return `${pick(ADJECTIVES)} ${pick(NOUNS)}`
-}
-
 const fieldInputStyle: React.CSSProperties = {
   width: '100%',
   padding: '10px 12px',
@@ -54,9 +49,8 @@ const modalStyle: React.CSSProperties = {
 export default function HomePage() {
   const router = useRouter()
   const [mode, setMode] = useState<'home' | 'create' | 'open'>('home')
-  const [phrase, setPhrase] = useState(generatePhrase)
+  const [phrase, setPhrase] = useState('')
   const [privatePassword, setPrivatePassword] = useState(false)
-  const [private2fa, setPrivate2fa] = useState(false)
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [openId, setOpenId] = useState('')
@@ -79,7 +73,6 @@ export default function HomePage() {
     setPassword('')
     setPasswordConfirm('')
     setPrivatePassword(false)
-    setPrivate2fa(false)
     setCreateError('')
   }
 
@@ -239,16 +232,6 @@ export default function HomePage() {
                       </>
                     )}
                   </div>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, color: '#3c4043' }}>
-                    <input
-                      type="checkbox"
-                      checked={private2fa}
-                      onChange={e => setPrivate2fa(e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: '#1a73e8', cursor: 'pointer' }}
-                    />
-                    Make private with a 2FA token
-                  </label>
 
                 </div>
               </div>

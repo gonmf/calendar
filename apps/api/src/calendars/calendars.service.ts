@@ -7,6 +7,8 @@ import { Calendar, CalendarDocument } from './schemas/calendar.schema'
 import { CreateCalendarDto } from './dto/create-calendar.dto'
 import { AccessCalendarDto } from './dto/access-calendar.dto'
 import { generateCalendarId, validateCalendarId } from 'src/ids'
+import { Cron } from '@nestjs/schedule'
+import { EventsService } from 'src/events/events.service'
 
 const SALT_ROUNDS = 12
 
@@ -14,7 +16,8 @@ const SALT_ROUNDS = 12
 export class CalendarsService {
   constructor(
     @InjectModel(Calendar.name) private calendarModel: Model<CalendarDocument>,
-    private jwtService: JwtService
+    private jwtService: JwtService,
+    private eventsService: EventsService,
   ) {}
 
   async create(dto: CreateCalendarDto): Promise<{ id?: string, token?: string }> {
@@ -45,7 +48,7 @@ export class CalendarsService {
     if (!validateCalendarId(calId)) {
       throw new NotFoundException('Calendar not found')
     }
-    const calendar = await this.calendarModel.findOne({ id: calId }).exec()
+    const calendar = await this.calendarModel.findOne({ id: calId }).lean().exec()
     if (!calendar) {
       throw new NotFoundException('Calendar not found')
     }
@@ -80,7 +83,24 @@ export class CalendarsService {
   }
 
   async updateTimeUpdated(calId: string) {
-    await this.calendarModel.updateOne({ calId }, { timeUpdated: Date.now() })
+    await this.calendarModel.updateOne({ calId }, { timeUpdated: Date.now() }).lean().exec()
+  }
+
+  @Cron('0 4 * * *') // 4am every day
+  async deleteCalendarsOlderThan90Days() {
+    const cutoff = Date.now() - 90 * 86400 * 1000
+
+    const calendars = await this.calendarModel.find({
+      timeUpdated: { $gt: cutoff }
+    }, { id: 1 }).limit(800).lean().exec()
+
+    const ids = calendars.map(c => c.id)
+    if (ids.length === 0) {
+      return
+    }
+
+    await this.calendarModel.deleteMany({ id: { $in: ids } }).lean().exec()
+    await this.eventsService.deleteCalendarEvents(ids)
   }
 
   private issueToken(calId: string, passwordHash: string | null): string {
