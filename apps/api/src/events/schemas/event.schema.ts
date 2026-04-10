@@ -62,15 +62,14 @@ export class Event {
 
   @ApiPropertyOptional()
   @Prop()
-  recurrenceEnd?: number
+  recurringEventId?: string // Not yet used
 
   @ApiPropertyOptional()
   @Prop()
-  recurringEventId?: string
+  originalTime?: number // Not yet used
 
-  @ApiPropertyOptional()
   @Prop()
-  originalTime?: number
+  timeDeleted?: number
 }
 
 export const EventSchema = SchemaFactory.createForClass(Event)

@@ -9,6 +9,7 @@ import EVENT_COLORS from '../../../components/colors'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CALENDARS_KEY = 'known_calendars'
+const ACTIVE_CALS_KEY = 'active_calendars'
 
 const dateKey = (d: Date) =>
   `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
@@ -22,6 +23,12 @@ interface ContextMenu {
 interface CalendarInfo {
   id: string
   name: string
+}
+
+interface Toast {
+  eventId: string
+  calId: string
+  timer: ReturnType<typeof setTimeout>
 }
 
 function getKnownCalendars(): CalendarInfo[] {
@@ -57,11 +64,19 @@ function CopyButton({ value }: { value: string }) {
 
 export default function CalendarPage({ params }: { params: Promise<{ calendarIds: string }> }) {
   const { calendarIds } = use(params)
-  const calIdList = calendarIds.split('_').map(id => id.trim()).sort()
-  const primaryCalId = calIdList[0]!
+  const primaryCalId = calendarIds.split('_').map(id => id.trim()).sort()[0]!
+
+  const [calIdList, setCalIdList] = useState<string[]>(() => {
+    const fromUrl = calendarIds.split('_').map(id => id.trim()).sort()
+    try {
+      const stored = JSON.parse(localStorage.getItem(ACTIVE_CALS_KEY) ?? 'null')
+      if (Array.isArray(stored) && stored.length > 0) return stored
+    } catch {}
+    return fromUrl
+  })
 
   const [current, setCurrent] = useState(new Date())
-  const [events, setEvents] = useState<CalEvent[]>([])
+  const [eventsByCalId, setEventsByCalId] = useState<Record<string, CalEvent[]>>({})
   const [modalDate, setModalDate] = useState<Date | null>(null)
   const [editEvent, setEditEvent] = useState<CalEvent | null>(null)
   const [searching, setSearching] = useState(false)
@@ -81,6 +96,17 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     if (typeof window === 'undefined') return true
     return window.innerWidth >= 1024
   })
+  const [toast, setToast] = useState<Toast | null>(null)
+
+  // derive visible events from active calendars
+  const events = calIdList.flatMap(id => eventsByCalId[id] ?? [])
+
+  // persist active calendars to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVE_CALS_KEY, JSON.stringify(calIdList))
+    } catch {}
+  }, [calIdList.join('_')])
 
   useEffect(() => {
     if (!accessGranted) return
@@ -100,13 +126,21 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     return () => { window.removeEventListener('click', handler); window.removeEventListener('keydown', keyHandler) }
   }, [])
 
+  // fetch only calendars not yet loaded
   useEffect(() => {
     if (!accessGranted) return
-
-    fetch(`http://localhost:3001/events/${calIdList.join('_')}/all`, { method: 'POST' })
-      .then(r => r.json())
-      .then(json => { if (json.success) setEvents(json.data) })
-      .catch(() => {})
+    const toFetch = calIdList.filter(id => !eventsByCalId[id])
+    if (toFetch.length === 0) return
+    toFetch.forEach(id => {
+      fetch(`http://localhost:3001/events/${id}/all`, { method: 'POST' })
+        .then(r => r.json())
+        .then(json => {
+          if (json.success) {
+            setEventsByCalId(prev => ({ ...prev, [id]: json.data }))
+          }
+        })
+        .catch(() => {})
+    })
   }, [calIdList.join('_'), accessGranted])
 
   useEffect(() => {
@@ -255,9 +289,31 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
 
   const changeMonth = (dir: number) => setCurrent(new Date(y, m + dir, 1))
 
-  // find which calendar an event belongs to by its calId field
   const getEventCalId = (ev: CalEvent): string =>
-    calIdList.find(id => ev.id === id) ?? primaryCalId
+    calIdList.find(id => ev.calId === id) ?? primaryCalId
+
+  const showToast = (eventId: string, evCalId: string) => {
+    if (toast) clearTimeout(toast.timer)
+    const timer = setTimeout(() => setToast(null), 5000)
+    setToast({ eventId, calId: evCalId, timer })
+  }
+
+  const handleUndo = async () => {
+    if (!toast) return
+    clearTimeout(toast.timer)
+    const { eventId, calId: evCalId } = toast
+    setToast(null)
+    try {
+      const res = await fetch(`http://localhost:3001/events/${evCalId}/undoDelete/${eventId}`, { method: 'POST' })
+      const json = await res.json()
+      if (json.success) {
+        setEventsByCalId(prev => ({
+          ...prev,
+          [evCalId]: [...(prev[evCalId] ?? []), json.data]
+        }))
+      }
+    } catch(e) { console.error(e) }
+  }
 
   const handleCreate = async (payload: EventPayload) => {
     try {
@@ -267,7 +323,12 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         body: JSON.stringify(payload),
       })
       const json = await res.json()
-      if (json.success) setEvents(prev => [...prev, json.data])
+      if (json.success) {
+        setEventsByCalId(prev => ({
+          ...prev,
+          [primaryCalId]: [...(prev[primaryCalId] ?? []), json.data]
+        }))
+      }
     } catch(e) { console.error(e) }
   }
 
@@ -281,7 +342,12 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         body: JSON.stringify(payload),
       })
       const json = await res.json()
-      if (json.success) setEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, ...payload } : e))
+      if (json.success) {
+        setEventsByCalId(prev => ({
+          ...prev,
+          [evCalId]: (prev[evCalId] ?? []).map(e => e.id === editEvent.id ? { ...e, ...payload } : e)
+        }))
+      }
     } catch(e) { console.error(e) }
     setEditEvent(null)
   }
@@ -289,9 +355,14 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
   const handleDelete = async () => {
     if (!editEvent) return
     const evCalId = getEventCalId(editEvent)
+    const eventId = editEvent.id
     try {
-      await fetch(`http://localhost:3001/events/${evCalId}/delete/${editEvent.id}`, { method: 'POST' })
-      setEvents(prev => prev.filter(e => e.id !== editEvent.id))
+      await fetch(`http://localhost:3001/events/${evCalId}/delete/${eventId}`, { method: 'POST' })
+      setEventsByCalId(prev => ({
+        ...prev,
+        [evCalId]: (prev[evCalId] ?? []).filter(e => e.id !== eventId)
+      }))
+      showToast(eventId, evCalId)
     } catch(e) { console.error(e) }
     setEditEvent(null)
   }
@@ -303,7 +374,11 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     setContextMenu(null)
     try {
       await fetch(`http://localhost:3001/events/${evCalId}/delete/${ev.id}`, { method: 'POST' })
-      setEvents(prev => prev.filter(e => e.id !== ev.id))
+      setEventsByCalId(prev => ({
+        ...prev,
+        [evCalId]: (prev[evCalId] ?? []).filter(e => e.id !== ev.id)
+      }))
+      showToast(ev.id, evCalId)
     } catch(e) { console.error(e) }
   }
 
@@ -319,20 +394,24 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         body: JSON.stringify({ color }),
       })
       const json = await res.json()
-      if (json.success) setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, color } : e))
+      if (json.success) {
+        setEventsByCalId(prev => ({
+          ...prev,
+          [evCalId]: (prev[evCalId] ?? []).map(e => e.id === ev.id ? { ...e, color } : e)
+        }))
+      }
     } catch(e) { console.error(e) }
   }
 
   const toggleCalendar = (id: string) => {
-    const current = new Set(calIdList)
-    if (current.has(id)) {
-      if (current.size === 1) return
-      current.delete(id)
-    } else {
-      current.add(id)
-    }
-    const sorted = Array.from(current).sort().join('_')
-    router.push(`/cal/${sorted}`)
+    setCalIdList(prev => {
+      if (prev.includes(id)) {
+        if (prev.length === 1) return prev
+        return prev.filter(i => i !== id).sort()
+      } else {
+        return [...prev, id].sort()
+      }
+    })
   }
 
   const hoverProps = (key: string) => ({
@@ -530,7 +609,6 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                         gap: 12,
                       }}
                     >
-                      {/* checkbox */}
                       <div
                         onClick={e => { e.stopPropagation(); if (!isOnly) toggleCalendar(cal.id) }}
                         style={{
@@ -549,16 +627,12 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                           </svg>
                         )}
                       </div>
-
-                      {/* name */}
                       <span
                         onClick={() => router.push(`/cal/${cal.id}`)}
                         style={{ flex: 1, fontSize: 14, color: '#3c4043', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', userSelect: 'none' }}
                       >
                         {cal.name}
                       </span>
-
-                      {/* options icon — only on hover */}
                       <div
                         onClick={e => e.stopPropagation()}
                         style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'default', visibility: isHovered ? 'visible' : 'hidden' }}
@@ -769,6 +843,36 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#323232',
+          color: '#fff',
+          borderRadius: 8,
+          padding: '12px 20px',
+          fontSize: 14,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.24)',
+          zIndex: 3000,
+          whiteSpace: 'nowrap',
+        }}>
+          Event deleted
+          <span
+            onClick={handleUndo}
+            style={{ color: '#8ab4f8', fontWeight: 500, cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+            onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+          >
+            Undo
+          </span>
         </div>
       )}
 

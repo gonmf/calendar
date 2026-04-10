@@ -36,6 +36,7 @@ const TIMEZONES: string[] = [
 ]
 
 export interface CalEvent {
+  calId: string
   id: string
   title: string
   description?: string

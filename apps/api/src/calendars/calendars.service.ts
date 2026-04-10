@@ -48,7 +48,7 @@ export class CalendarsService {
     if (!validateCalendarId(calId)) {
       throw new NotFoundException('Calendar not found')
     }
-    const calendar = await this.calendarModel.findOne({ id: calId }).lean().exec()
+    const calendar = await this.calendarModel.findOne({ id: calId, timeDeleted: null }).lean().exec()
     if (!calendar) {
       throw new NotFoundException('Calendar not found')
     }
@@ -91,6 +91,7 @@ export class CalendarsService {
     const cutoff = Date.now() - 90 * 86400 * 1000
 
     const calendars = await this.calendarModel.find({
+      timeDeleted: null,
       timeUpdated: { $gt: cutoff }
     }, { id: 1 }).limit(800).lean().exec()
 
@@ -99,8 +100,16 @@ export class CalendarsService {
       return
     }
 
-    await this.calendarModel.deleteMany({ id: { $in: ids } }).lean().exec()
-    await this.eventsService.deleteCalendarEvents(ids)
+    await this.calendarModel.updateMany({ id: { $in: ids }, timeDeleted: null }, { timeDeleted: Date.now() }).lean().exec()
+    await this.eventsService.markDeletedByCalendarId(ids)
+
+    await this.deleteEntitiesMarkedAsDeletedForSomeTime()
+  }
+
+  private async deleteEntitiesMarkedAsDeletedForSomeTime() {
+    const cutoff = Date.now() - 86400 * 1000
+    await this.calendarModel.deleteMany({ timeDeleted: { $lt:  cutoff }}).lean().exec()
+    await this.eventsService.deleteAllMarkedDeletedForSomeTime()
   }
 
   private issueToken(calId: string, passwordHash: string | null): string {

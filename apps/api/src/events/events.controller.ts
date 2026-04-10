@@ -88,6 +88,20 @@ export class EventsController {
     return { success }
   }
 
+  @Post(':calId/undoDelete/:eventId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Undo the recent deletion of an event' })
+  @ApiParam({ name: 'calId', type: String })
+  @ApiParam({ name: 'eventId', type: String })
+  @ApiResponse({ status: 200, description: 'Event not longer deleted' })
+  async undoDelete(@Param('calId') calId: string, @Param('eventId') eventId: string) {
+    const event = await this.eventsService.undoDelete(calId, eventId)
+    if (event) {
+      await this.calendarUpdated(calId)
+    }
+    return { success: !!event, data: event }
+  }
+
   @Post(':calId/search')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Search events' })

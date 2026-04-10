@@ -21,8 +21,9 @@ export class EventsService {
 
     const { title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime } = dto
 
-    const created = await this.eventModel.create({
-      id: generateEventId(),
+    const id = generateEventId()
+    await this.eventModel.create({
+      id,
       calId,
       title,
       description,
@@ -34,12 +35,12 @@ export class EventsService {
       color,
       recurring,
       recurrenceRule,
-      recurrenceEnd,
       recurringEventId,
-      originalTime
+      originalTime,
     })
+    const created = await this.eventModel.findOne({ id }).lean().exec()
 
-    return this.cleanEvent(created)
+    return created ? this.cleanEvent(created) : undefined
   }
 
   async update(calId: string, eventId: string, dto: UpdateEventDto): Promise<boolean> {
@@ -49,7 +50,7 @@ export class EventsService {
 
     const { title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime } = dto
 
-    const result = await this.eventModel.updateOne({ calId, id: eventId }, { title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime }).lean().exec()
+    const result = await this.eventModel.updateOne({ calId, id: eventId, timeDeleted: null }, { title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime }).lean().exec()
     return result.modifiedCount === 1
   }
 
@@ -60,7 +61,7 @@ export class EventsService {
 
     const { color } = dto
 
-    const result = await this.eventModel.updateOne({ calId, id: eventId }, { color }).lean().exec()
+    const result = await this.eventModel.updateOne({ calId, id: eventId, timeDeleted: null }, { color }).lean().exec()
     return result.modifiedCount === 1
   }
 
@@ -70,7 +71,8 @@ export class EventsService {
     }
 
     const found = await this.eventModel.find({
-      ...(calIds.length === 1 ? { calId: calIds[0] } : { calId: { $in: calIds }})
+      ...(calIds.length === 1 ? { calId: calIds[0] } : { calId: { $in: calIds }}),
+      timeDeleted: null
     }).lean().exec()
     return found.map(obj => this.cleanEvent(obj))
   }
@@ -80,8 +82,22 @@ export class EventsService {
       return false
     }
 
-    const result = await this.eventModel.deleteOne({ calId, id: eventId }).lean().exec()
-    return result.deletedCount === 1
+    const result = await this.eventModel.updateOne({ calId, id: eventId, timeDeleted: null }, { timeDeleted: Date.now() }).lean().exec()
+    return result.modifiedCount === 1
+  }
+
+  async undoDelete(calId: string, eventId: string): Promise<Event | undefined> {
+    if (!this.validCalendarId(calId) || !this.validEventId(eventId)) {
+      return
+    }
+
+    const result = await this.eventModel.updateOne({ calId, id: eventId }, { timeDeleted: null }).lean().exec()
+    if (result.modifiedCount !== 1) {
+      return
+    }
+
+    const event = await this.eventModel.findOne({ calId, id: eventId, timeDeleted: null }).lean().exec()
+    return event ? this.cleanEvent(event) : undefined
   }
 
   async search(calIds: string[], query: string): Promise<Event[] | undefined> {
@@ -94,6 +110,7 @@ export class EventsService {
         ...(calIds.length === 1 ? { calId: calIds[0] } : { calId: { $in: calIds } }),
         title: { $regex: query, $options: 'i' },
         recurringEventId: null,
+        timeDeleted: null,
       })
       .limit(8)
       .lean()
@@ -105,15 +122,21 @@ export class EventsService {
     return true
   }
 
-  async deleteCalendarEvents(calendarIds: string[]) {
+  async markDeletedByCalendarId(calendarIds: string[]) {
     if (calendarIds.length) {
-      await this.eventModel.deleteMany({ calId: { $in: calendarIds }}).lean().exec()
+      await this.eventModel.updateMany({ calId: { $in: calendarIds }, timeDeleted: null }, { timeDeleted: Date.now() }).lean().exec()
     }
   }
 
+  async deleteAllMarkedDeletedForSomeTime() {
+    const cutoff = Date.now() - 86400 * 1000
+
+    await this.eventModel.deleteMany({ timeDeleted: { $lt: cutoff } })
+  }
+
   private cleanEvent(event: Event): Event {
-    const { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime } = event
-    return { id, calId, title, description, allDay, startTime, endTime, startZone, endZone, color, recurring, recurrenceRule, recurrenceEnd, recurringEventId, originalTime }
+    const { _id, ...rest } = event as unknown as Record<string, unknown>
+    return rest as unknown as Event
   }
 
   private validCalendarId(id: string) {

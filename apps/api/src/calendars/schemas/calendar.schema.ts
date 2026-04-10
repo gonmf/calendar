@@ -22,6 +22,9 @@ export class Calendar {
   timeUpdated: number
 
   @Prop()
+  timeDeleted?: number
+
+  @Prop()
   password?: string
 
   @Prop()
