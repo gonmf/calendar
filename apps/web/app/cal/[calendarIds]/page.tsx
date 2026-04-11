@@ -62,9 +62,119 @@ function CopyButton({ value }: { value: string }) {
   )
 }
 
+function SidebarCreateCalendar({ onClose, onOpen }: { onClose: () => void, onOpen: () => void }) {
+  const router = useRouter()
+  const [name, setName] = useState(() => '')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleCreate = async () => {
+    if (!name.trim()) return
+    setLoading(true)
+    try {
+      const res = await fetch('http://localhost:3001/calendars/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        router.push(`/cal/${json.data.id}`)
+      } else {
+        setError('Something went wrong.')
+      }
+    } catch { setError('Could not reach the server.') }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ padding: '16px 24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <label style={{ fontSize: 12, color: '#70757a', fontWeight: 500, marginBottom: 6, display: 'block' }}>Give it a name</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          style={{ width: '100%', padding: '10px 12px', border: '1px solid #dadce0', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: '#3c4043', boxSizing: 'border-box' }}
+          maxLength={60}
+        />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={onOpen} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#1a73e8', fontFamily: 'inherit', padding: 0 }}>
+          Open existing instead
+        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {error && <span style={{ fontSize: 12, color: '#d93025' }}>{error}</span>}
+          <button
+            onClick={handleCreate}
+            disabled={!name.trim() || loading}
+            style={{ background: !name.trim() || loading ? '#a8c7fa' : '#1a73e8', border: 'none', borderRadius: 24, padding: '10px 22px', fontSize: 14, cursor: name.trim() && !loading ? 'pointer' : 'not-allowed', color: 'white', fontWeight: 500, fontFamily: 'inherit' }}
+          >
+            {loading ? 'Creating...' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SidebarOpenCalendar({ onClose }: { onClose: () => void }) {
+  const router = useRouter()
+  const [openId, setOpenId] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleOpen = async () => {
+    const id = openId.trim()
+    if (!id) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`http://localhost:3001/calendars/${id}/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const json = await res.json()
+      if (json.success || json.reason === 'password_required') {
+        router.push(`/cal/${id}`)
+        onClose()
+      } else {
+        setError('Calendar not found.')
+      }
+    } catch { setError('Could not reach the server.') }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ padding: '16px 24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <label style={{ fontSize: 12, color: '#70757a', fontWeight: 500, marginBottom: 6, display: 'block' }}>Calendar ID</label>
+        <input
+          autoFocus
+          value={openId}
+          onChange={e => { setOpenId(e.target.value); setError('') }}
+          onKeyDown={e => { if (e.key === 'Enter') handleOpen() }}
+          placeholder=""
+          style={{ width: '100%', padding: '10px 12px', border: `1px solid ${error ? '#d93025' : '#dadce0'}`, borderRadius: 8, fontSize: 14, fontFamily: 'monospace', outline: 'none', background: '#fff', color: '#3c4043', boxSizing: 'border-box' }}
+        />
+        {error && <div style={{ fontSize: 12, color: '#d93025', marginTop: 4 }}>{error}</div>}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={handleOpen}
+          disabled={!openId.trim() || loading}
+          style={{ background: !openId.trim() || loading ? '#a8c7fa' : '#1a73e8', border: 'none', borderRadius: 24, padding: '10px 22px', fontSize: 14, cursor: openId.trim() && !loading ? 'pointer' : 'not-allowed', color: 'white', fontWeight: 500, fontFamily: 'inherit' }}
+        >
+          {loading ? 'Checking...' : 'Open'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function CalendarPage({ params }: { params: Promise<{ calendarIds: string }> }) {
   const { calendarIds } = use(params)
-  const primaryCalId = calendarIds.split('_').map(id => id.trim()).sort()[0]!
 
   const [calIdList, setCalIdList] = useState<string[]>(() => {
     const fromUrl = calendarIds.split('_').map(id => id.trim()).sort()
@@ -76,6 +186,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     } catch {}
     return fromUrl
   })
+  const primaryCalId = calIdList[0]!
 
   const [current, setCurrent] = useState(new Date())
   const [eventsByCalId, setEventsByCalId] = useState<Record<string, CalEvent[]>>({})
@@ -99,9 +210,13 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     return window.innerWidth >= 1024
   })
   const [toast, setToast] = useState<Toast | null>(null)
+  const [sidebarHeaderHovered, setSidebarHeaderHovered] = useState(false)
+  const [showCalendarModal, setShowCalendarModal] = useState<'create' | 'open' | null>(null)
 
   // derive visible events from active calendars
   const events = calIdList.flatMap(id => eventsByCalId[id] ?? [])
+
+  const calendarOptions = knownCalendars.filter(c => calIdList.includes(c.id))
 
   // persist active calendars to localStorage
   useEffect(() => {
@@ -322,9 +437,10 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     } catch(e) { console.error(e) }
   }
 
-  const handleCreate = async (payload: EventPayload) => {
+  const handleCreate = async (payload: EventPayload, targetCalId: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/events/${primaryCalId}/create`, {
+      const calId = targetCalId || primaryCalId
+      const res = await fetch(`http://localhost:3001/events/${calId}/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -590,9 +706,30 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         }}>
           {sidebarOpen && (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px 8px', marginBottom: 4 }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px 8px', marginBottom: 4 }}
+                onMouseEnter={() => setSidebarHeaderHovered(true)}
+                onMouseLeave={() => setSidebarHeaderHovered(false)}
+              >
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#444746', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                   My calendars
+                </div>
+                <div
+                  onClick={() => setShowCalendarModal('create')}
+                  style={{
+                    width: 24, height: 24, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer',
+                    visibility: sidebarHeaderHovered ? 'visible' : 'hidden',
+                    color: '#5f6368',
+                    fontSize: 20,
+                    lineHeight: 1,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#dadce0')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  title="Add calendar"
+                >
+                  +
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -768,8 +905,10 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
       {modalDate && (
         <EventModal
           date={modalDate}
+          calendarId={calendarOptions[0]!.id}
+          calendarOptions={calIdList.length > 1 ? calendarOptions : undefined}
           onClose={() => setModalDate(null)}
-          onSave={async (payload) => { await handleCreate(payload); setModalDate(null) }}
+          onSave={async (payload, calId) => { await handleCreate(payload, calId); setModalDate(null) }}
         />
       )}
 
@@ -777,6 +916,8 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         <EventModal
           date={new Date(editEvent.startTime)}
           event={editEvent}
+          calendarId={editEvent.calId}
+          calendarOptions={calIdList.length > 1 ? calendarOptions : undefined}
           onClose={() => setEditEvent(null)}
           onSave={handleUpdate}
           onDelete={handleDelete}
@@ -883,6 +1024,34 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         </div>
       )}
 
+      {showCalendarModal && (
+        <div onClick={() => setShowCalendarModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#f6f8fc', borderRadius: 24, width: 500, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', overflow: 'hidden' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0' }}>
+              <span style={{ fontSize: 18, fontWeight: 500, color: '#3c4043' }}>
+                {showCalendarModal === 'create' ? 'New calendar' : 'Open calendar'}
+              </span>
+              <button
+                onClick={() => setShowCalendarModal(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#5f6368', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >✕</button>
+            </div>
+
+            {showCalendarModal === 'create' ? (
+              <SidebarCreateCalendar
+                onClose={() => setShowCalendarModal(null)}
+                onOpen={() => setShowCalendarModal('open')}
+              />
+            ) : (
+              <SidebarOpenCalendar
+                onClose={() => setShowCalendarModal(null)}
+              />
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   )
 }

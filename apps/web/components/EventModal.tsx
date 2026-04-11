@@ -72,8 +72,10 @@ export interface EventPayload {
 interface Props {
   date: Date
   event?: CalEvent
+  calendarId?: string
+  calendarOptions?: { id: string, name: string }[]
   onClose: () => void
-  onSave: (event: EventPayload) => void
+  onSave: (event: EventPayload, calId: string) => void
   onDelete?: () => void
 }
 
@@ -108,7 +110,7 @@ const selectStyle: React.CSSProperties = {
   outline: 'none',
 }
 
-export default function EventModal({ date, event, onClose, onSave, onDelete }: Props) {
+export default function EventModal({ date, event, calendarId, calendarOptions, onClose, onSave, onDelete }: Props) {
   const now = new Date()
   const titleRef = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState(event?.title ?? '')
@@ -125,7 +127,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
   const [color, setColor] = useState(event?.color ?? EVENT_COLORS[0])
   const [errors, setErrors] = useState<string[]>([])
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
-
+  const [selectedCalId, setSelectedCalId] = useState(calendarId ?? '')
   const isEditing = !!event
 
   useEffect(() => { titleRef.current?.focus() }, [])
@@ -176,7 +178,7 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
       color,
       recurring: recurrenceRule !== '',
       recurrenceRule: recurrenceRule || undefined,
-    })
+    }, selectedCalId || calendarId || '')
     onClose()
   }
 
@@ -235,7 +237,6 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
 
         {/* Body */}
         <div style={{ padding: '12px 24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
           {/* Title */}
           <input
             ref={titleRef}
@@ -360,10 +361,27 @@ export default function EventModal({ date, event, onClose, onSave, onDelete }: P
             </div>
           )}
 
+          {/* Calendar selector or label */}
+          {calendarOptions && calendarOptions.length > 1 && !isEditing && (
+            <div>
+              <label style={labelStyle}>Calendar</label>
+              <select
+                value={selectedCalId}
+                onChange={e => setSelectedCalId(e.target.value)}
+                style={{ ...fieldInputStyle, cursor: 'pointer' }}
+              >
+                {calendarOptions.map(cal => (
+                  <option key={cal.id} value={cal.id}>{cal.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
         </div>
 
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 24px 20px' }}>
+
           <div>
             {isEditing && onDelete && (
               <button
