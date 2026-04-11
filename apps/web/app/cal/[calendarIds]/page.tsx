@@ -69,8 +69,10 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
   const [calIdList, setCalIdList] = useState<string[]>(() => {
     const fromUrl = calendarIds.split('_').map(id => id.trim()).sort()
     try {
-      const stored = JSON.parse(localStorage.getItem(ACTIVE_CALS_KEY) ?? 'null')
-      if (Array.isArray(stored) && stored.length > 0) return stored
+      const stored: string[] = JSON.parse(localStorage.getItem(ACTIVE_CALS_KEY) ?? 'null')
+      if (Array.isArray(stored) && stored.length > 0 && fromUrl.every(id => stored.includes(id))) {
+        return stored
+      }
     } catch {}
     return fromUrl
   })
@@ -106,6 +108,11 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     try {
       localStorage.setItem(ACTIVE_CALS_KEY, JSON.stringify(calIdList))
     } catch {}
+    const next = `/cal/${calIdList.join('_')}`
+    const current = window.location.pathname
+    if (next !== current) {
+      window.history.replaceState(null, '', next)
+    }
   }, [calIdList.join('_')])
 
   useEffect(() => {

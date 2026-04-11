@@ -9,3 +9,4 @@ TODO:
 - calendar options: edit name, 12 color palette, share with view only access, authorization (edit/remove/add password), remove from list, delete
 - rate throttle with @nestjs/throttler, trusting an nginx gateway on top
 - deploy to Oracle Cloud (Always Free VPS), Mongo Atlas free tier
+- BUG: on first visit, it is reading all past calendars from localStorage, and crashing if any is unavailable (deleted); instead of reading them from the URL and only requiring those
