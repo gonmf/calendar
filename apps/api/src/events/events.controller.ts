@@ -7,6 +7,7 @@ import { SearchEventDto } from './dto/search-event.dto'
 import { CalendarsService } from 'src/calendars/calendars.service'
 import { UpdateEventColorDto } from './dto/update-event-color.dto'
 import { uniq } from 'rambda'
+import { Throttle } from '@nestjs/throttler'
 
 @ApiTags('events')
 @Controller('events')
@@ -16,6 +17,7 @@ export class EventsController {
     private readonly calendarsService: CalendarsService,
   ) {}
 
+  @Throttle({ default: { limit: 4, ttl: 2_000 } })
   @Post(':calId/create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Create an event' })

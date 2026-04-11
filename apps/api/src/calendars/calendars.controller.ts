@@ -3,12 +3,14 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger'
 import { CalendarsService } from './calendars.service'
 import { CreateCalendarDto } from 'src/calendars/dto/create-calendar.dto'
 import { AccessCalendarDto } from './dto/access-calendar.dto'
+import { Throttle } from '@nestjs/throttler'
 
 @ApiTags('calendars')
 @Controller('calendars')
 export class CalendarsController {
   constructor(private readonly calendarsService: CalendarsService) {}
 
+  @Throttle({ default: { limit: 4, ttl: 2_000 } })
   @Post('create')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Create a new calendar' })
