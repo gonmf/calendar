@@ -15,7 +15,7 @@ export class EventsService {
   ) {}
 
   async create(calId: string, dto: CreateEventDto): Promise<Event | undefined> {
-    if (!this.validCalendarId(calId) || !this.validateEvent(dto)) {
+    if (!validateCalendarId(calId) || !this.validateEvent(dto)) {
       return
     }
 
@@ -44,7 +44,7 @@ export class EventsService {
   }
 
   async update(calId: string, eventId: string, dto: UpdateEventDto): Promise<boolean> {
-    if (!this.validCalendarId(calId) || !this.validEventId(eventId) || !this.validateEvent(dto)) {
+    if (!validateCalendarId(calId) || !validateEventId(eventId) || !this.validateEvent(dto)) {
       return false
     }
 
@@ -55,7 +55,7 @@ export class EventsService {
   }
 
   async updateColor(calId: string, eventId: string, dto: UpdateEventColorDto): Promise<boolean> {
-    if (!this.validCalendarId(calId) || !this.validEventId(eventId)) {
+    if (!validateCalendarId(calId) || !validateEventId(eventId)) {
       return false
     }
 
@@ -66,7 +66,7 @@ export class EventsService {
   }
 
   async findAll(calIds: string[]): Promise<Event[] | undefined> {
-    if (calIds.length === 0 || calIds.some(calId => !this.validCalendarId(calId))) {
+    if (calIds.length === 0 || calIds.some(calId => !validateCalendarId(calId))) {
       return undefined
     }
 
@@ -78,7 +78,7 @@ export class EventsService {
   }
 
   async delete(calId: string, eventId: string): Promise<boolean> {
-    if (!this.validCalendarId(calId) || !this.validEventId(eventId)) {
+    if (!validateCalendarId(calId) || !validateEventId(eventId)) {
       return false
     }
 
@@ -87,7 +87,7 @@ export class EventsService {
   }
 
   async undoDelete(calId: string, eventId: string): Promise<Event | undefined> {
-    if (!this.validCalendarId(calId) || !this.validEventId(eventId)) {
+    if (!validateCalendarId(calId) || !validateEventId(eventId)) {
       return
     }
 
@@ -101,7 +101,7 @@ export class EventsService {
   }
 
   async search(calIds: string[], query: string): Promise<Event[] | undefined> {
-    if (calIds.some(calId => !this.validCalendarId(calId))) {
+    if (calIds.some(calId => !validateCalendarId(calId))) {
       return undefined
     }
 
@@ -139,62 +139,28 @@ export class EventsService {
     return rest as unknown as Event
   }
 
-  private validCalendarId(id: string) {
-    const ret = validateCalendarId(id)
-    if (!ret) {
-      console.warn('invalid calendar ID', id)
-    }
-    return ret
-  }
-
-  private validEventId(id: string) {
-    const ret = validateEventId(id)
-    if (!ret) {
-      console.warn('invalid event ID', id)
-    }
-    return ret
-  }
-
   private validateEvent(dto: CreateEventDto | UpdateEventDto) {
     if (dto.allDay) {
       if (dto.startTime > dto.endTime) {
-        console.warn('invalid end time before start time', { startTime: dto.startTime, endTime: dto.endTime })
         return false
       }
       if ((dto.startTime % 86400000) !== 0) {
-        console.warn('invalid start time not lined to the day', dto.startTime)
         return false
       }
       if ((dto.endTime % 86400000) !== 0) {
-        console.warn('invalid end time not lined to the day', dto.endTime)
         return false
       }
     }
     if (!dto.allDay) {
       if (dto.startTime >= dto.endTime) {
-        console.warn('invalid start time not before end time', { startTime: dto.startTime, endTime: dto.endTime })
         return false
       }
       if ((dto.startTime % 60000) !== 0) {
-        console.warn('invalid start time not lined up to the minute', dto.startTime)
         return false
       }
       if ((dto.endTime % 60000) !== 0) {
-        console.warn('invalid end time not lined up to the minute', dto.endTime)
         return false
       }
-    }
-
-    dto.title = dto.title.trim()
-    if (dto.title.length > 200) {
-      console.warn('invalid title length too long', dto.title.length)
-      return false
-    }
-
-    dto.description = (dto.description ?? '').trim()
-    if (dto.description.length > 4000) {
-      console.warn('invalid description length too long', dto.description.length)
-      return false
     }
 
     return true

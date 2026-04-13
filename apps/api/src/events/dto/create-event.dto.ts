@@ -1,14 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsString, IsNotEmpty, IsInt, Min, Max, IsBoolean, Length, IsOptional } from "class-validator"
+import { Transform, TransformFnParams } from 'class-transformer'
+import { IsString, IsNotEmpty, IsInt, Min, Max, IsBoolean, Length, IsOptional, MaxLength, MinLength } from "class-validator"
 
 export class CreateEventDto {
   @ApiProperty({ example: 'Example event'})
+  @MaxLength(200)
+  @MinLength(1)
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }: TransformFnParams) => value?.trim())
   title: string
 
   @ApiProperty()
+  @MaxLength(4000)
   @IsString()
+  @Transform(({ value }: TransformFnParams) => value?.trim())
   description: string
 
   @ApiProperty()
@@ -30,16 +36,19 @@ export class CreateEventDto {
   @ApiProperty({ example: 'UTC' })
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }: TransformFnParams) => value?.trim())
   startZone: string
 
   @ApiProperty({ example: 'Europe/Lisbon' })
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }: TransformFnParams) => value?.trim())
   endZone: string
 
   @ApiProperty({ example: '#0f9d58'})
   @IsString()
   @Length(7, 7)
+  @Transform(({ value }: TransformFnParams) => value?.trim())
   color: string
 
   @ApiProperty()
@@ -50,6 +59,7 @@ export class CreateEventDto {
   @IsString()
   @IsNotEmpty()
   @IsOptional()
+  @Transform(({ value }: TransformFnParams) => value?.trim())
   recurrenceRule?: string
 
   @ApiPropertyOptional()
@@ -61,6 +71,7 @@ export class CreateEventDto {
   @IsString()
   @IsNotEmpty()
   @IsOptional()
+  @Transform(({ value }: TransformFnParams) => value?.trim())
   recurringEventId?: string
 
   @ApiPropertyOptional()

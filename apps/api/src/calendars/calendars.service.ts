@@ -9,6 +9,7 @@ import { AccessCalendarDto } from './dto/access-calendar.dto'
 import { generateCalendarId, validateCalendarId } from 'src/ids'
 import { Cron } from '@nestjs/schedule'
 import { EventsService } from 'src/events/events.service'
+import { UpdateCalendarNameDto } from './dto/update-calendar-name.dto'
 
 const SALT_ROUNDS = 12
 
@@ -42,6 +43,16 @@ export class CalendarsService {
     const token = this.issueToken(created.id, password ?? null)
 
     return { id: created.id, token }
+  }
+
+  async updateName(calId: string, dto: UpdateCalendarNameDto): Promise<boolean> {
+    if (!validateCalendarId(calId)) {
+      return false
+    }
+
+    const result = await this.calendarModel.updateOne({ id: calId }, { name: dto.name }).lean().exec()
+
+    return result.modifiedCount === 1
   }
 
   async access(calId: string, dto: AccessCalendarDto): Promise<{ token: string, name: string }> {

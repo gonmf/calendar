@@ -31,6 +31,12 @@ interface Toast {
   timer: ReturnType<typeof setTimeout>
 }
 
+interface CalendarOptionsMenu {
+  calId: string
+  x: number
+  y: number
+}
+
 function getKnownCalendars(): CalendarInfo[] {
   try {
     return JSON.parse(localStorage.getItem(CALENDARS_KEY) ?? '[]')
@@ -212,6 +218,22 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
   const [toast, setToast] = useState<Toast | null>(null)
   const [sidebarHeaderHovered, setSidebarHeaderHovered] = useState(false)
   const [showCalendarModal, setShowCalendarModal] = useState<'create' | 'open' | null>(null)
+  const [calendarOptionsMenu, setCalendarOptionsMenu] = useState<CalendarOptionsMenu | null>(null)
+  const [forgetConfirm, setForgetConfirm] = useState<string | null>(null)
+  const [renameCalendar, setRenameCalendar] = useState<{ id: string, name: string } | null>(null)
+  const [renameName, setRenameName] = useState('')
+  const [renameError, setRenameError] = useState('')
+  const [renameLoading, setRenameLoading] = useState(false)
+
+  useEffect(() => {
+    const handler = () => { setContextMenu(null); setCalendarOptionsMenu(null) }
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setContextMenu(null); setCalendarOptionsMenu(null) }
+    }
+    window.addEventListener('click', handler)
+    window.addEventListener('keydown', keyHandler)
+    return () => { window.removeEventListener('click', handler); window.removeEventListener('keydown', keyHandler) }
+  }, [])
 
   // derive visible events from active calendars
   const events = calIdList.flatMap(id => eventsByCalId[id] ?? [])
@@ -395,7 +417,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
       const endDay = new Date(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
       if (endDay < startDay) return
       const cursor = new Date(startDay)
-      while (cursor <= endDay) {
+      while (cursor < endDay) {
         addToDate(cursor, ev)
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -541,6 +563,54 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     onMouseEnter: () => setHoveredBtn(key),
     onMouseLeave: () => setHoveredBtn(null),
   })
+
+  const handleRename = async () => {
+    if (!renameCalendar) return
+    const name = renameName.trim()
+    if (!name) { setRenameError('Name is required.'); return }
+    if (name.length > 60) { setRenameError('Name must be 60 characters or fewer.'); return }
+    setRenameLoading(true)
+    try {
+      const res = await fetch(`http://localhost:3001/calendars/${renameCalendar.id}/updateName`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        saveKnownCalendar(renameCalendar.id, name)
+        setKnownCalendars(getKnownCalendars())
+        setRenameCalendar(null)
+      } else {
+        setRenameError('Something went wrong.')
+      }
+    } catch { setRenameError('Could not reach the server.') }
+    setRenameLoading(false)
+  }
+
+  const handleForget = (calId: string) => {
+    // remove from known calendars in localStorage
+    try {
+      const existing = getKnownCalendars().filter(c => c.id !== calId)
+      localStorage.setItem(CALENDARS_KEY, JSON.stringify(existing))
+      setKnownCalendars(existing)
+    } catch {}
+
+    // remove from active list
+    setCalIdList(prev => {
+      const next = prev.filter(id => id !== calId)
+      return next.length > 0 ? next : prev // don't remove if it's the last one
+    })
+
+    // remove token
+    try {
+      const store = JSON.parse(localStorage.getItem('cal_tokens') ?? '{}')
+      delete store[calId]
+      localStorage.setItem('cal_tokens', JSON.stringify(store))
+    } catch {}
+
+    setForgetConfirm(null)
+  }
 
   if (!accessGranted) {
     return (
@@ -777,9 +847,13 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                       >
                         {cal.name}
                       </span>
+
                       <div
-                        onClick={e => e.stopPropagation()}
-                        style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'default', visibility: isHovered ? 'visible' : 'hidden' }}
+                        onClick={e => {
+                          e.stopPropagation()
+                          setCalendarOptionsMenu({ calId: cal.id, x: e.clientX, y: e.clientY })
+                        }}
+                        style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', visibility: isHovered ? 'visible' : 'hidden' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#dadce0')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
@@ -1048,6 +1122,144 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                 onClose={() => setShowCalendarModal(null)}
               />
             )}
+
+          </div>
+        </div>
+      )}
+
+      {calendarOptionsMenu && (() => {
+        const menuWidth = 160
+        const menuHeight = 180
+        const x = calendarOptionsMenu.x + menuWidth > window.innerWidth ? calendarOptionsMenu.x - menuWidth : calendarOptionsMenu.x
+        const y = calendarOptionsMenu.y + menuHeight > window.innerHeight ? calendarOptionsMenu.y - menuHeight : calendarOptionsMenu.y
+        return (
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'fixed', top: y, left: x, background: '#f6f8fc', borderRadius: 12, boxShadow: '0 8px 32px rgba(60,64,67,0.24)', border: '1px solid #dadce0', zIndex: 2000, minWidth: 160, overflow: 'hidden', fontFamily: 'Google Sans, Roboto, sans-serif' }}
+          >
+            <div
+              key="Rename"
+              onClick={() => {
+                const cal = knownCalendars.find(c => c.id === calendarOptionsMenu.calId)
+                if (cal) {
+                  setRenameCalendar(cal)
+                  setRenameName(cal.name)
+                  setRenameError('')
+                }
+                setCalendarOptionsMenu(null)
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#e8eaed')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              style={{ padding: '10px 16px', fontSize: 14, color: '#3c4043', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'background 0.1s' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#5f6368', flexShrink: 0 }}>
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Rename
+            </div>
+            {[
+              { label: 'Share', icon: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></> },
+              { label: 'Settings', icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></> },
+            ].map(({ label, icon }) => (
+              <div
+                key={label}
+                onClick={() => {
+                  setCalendarOptionsMenu(null)
+                  // placeholder — actions to be wired up
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#e8eaed')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                style={{ padding: '10px 16px', fontSize: 14, color: '#3c4043', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'background 0.1s' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#5f6368', flexShrink: 0 }}>
+                  {icon}
+                </svg>
+                {label}
+              </div>
+            ))}
+            <div
+              key="Forget"
+              onClick={() => {
+                setCalendarOptionsMenu(null)
+                setForgetConfirm(calendarOptionsMenu.calId)
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#e8eaed')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              style={{ padding: '10px 16px', fontSize: 14, color: '#d93025', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'background 0.1s' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#d93025', flexShrink: 0 }}>
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+              </svg>
+              Forget
+            </div>
+          </div>
+        )
+      })()}
+
+      {renameCalendar && (
+        <div onClick={() => setRenameCalendar(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#f6f8fc', borderRadius: 24, width: 400, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', overflow: 'hidden' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0' }}>
+              <span style={{ fontSize: 18, fontWeight: 500, color: '#3c4043' }}>Rename calendar</span>
+              <button onClick={() => setRenameCalendar(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#5f6368', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+
+            <div style={{ padding: '16px 24px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <input
+                autoFocus
+                value={renameName}
+                onChange={e => { setRenameName(e.target.value); setRenameError('') }}
+                onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenameCalendar(null) }}
+                maxLength={60}
+                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${renameError ? '#d93025' : '#dadce0'}`, borderRadius: 8, fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: '#3c4043', boxSizing: 'border-box' }}
+              />
+              {renameError && <div style={{ fontSize: 12, color: '#d93025' }}>{renameError}</div>}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '4px 24px 20px' }}>
+              <button
+                onClick={() => setRenameCalendar(null)}
+                style={{ background: 'transparent', border: '1px solid #dadce0', borderRadius: 24, padding: '10px 22px', fontSize: 14, cursor: 'pointer', color: '#3c4043', fontFamily: 'inherit' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRename}
+                disabled={!renameName.trim() || renameLoading}
+                style={{ background: !renameName.trim() || renameLoading ? '#a8c7fa' : '#1a73e8', border: 'none', borderRadius: 24, padding: '10px 22px', fontSize: 14, cursor: renameName.trim() && !renameLoading ? 'pointer' : 'not-allowed', color: 'white', fontWeight: 500, fontFamily: 'inherit' }}
+              >
+                {renameLoading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {forgetConfirm && (
+        <div onClick={() => setForgetConfirm(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#f6f8fc', borderRadius: 24, width: 400, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', padding: '28px 28px 20px' }}>
+
+            <div style={{ fontSize: 18, fontWeight: 500, color: '#3c4043', marginBottom: 10 }}>Forget this calendar?</div>
+            <div style={{ fontSize: 14, color: '#70757a', marginBottom: 24, lineHeight: 1.6 }}>
+              It is not deleted, just removed from your calendars list.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setForgetConfirm(null)}
+                style={{ background: 'transparent', border: '1px solid #dadce0', borderRadius: 24, padding: '10px 22px', fontSize: 14, cursor: 'pointer', color: '#3c4043', fontFamily: 'inherit' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleForget(forgetConfirm)}
+                style={{ background: '#d93025', border: 'none', borderRadius: 24, padding: '10px 22px', fontSize: 14, cursor: 'pointer', color: 'white', fontWeight: 500, fontFamily: 'inherit' }}
+              >
+                Forget
+              </button>
+            </div>
 
           </div>
         </div>

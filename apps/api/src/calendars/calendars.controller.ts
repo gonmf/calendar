@@ -4,6 +4,7 @@ import { CalendarsService } from './calendars.service'
 import { CreateCalendarDto } from 'src/calendars/dto/create-calendar.dto'
 import { AccessCalendarDto } from './dto/access-calendar.dto'
 import { Throttle } from '@nestjs/throttler'
+import { UpdateCalendarNameDto } from './dto/update-calendar-name.dto'
 
 @ApiTags('calendars')
 @Controller('calendars')
@@ -18,6 +19,16 @@ export class CalendarsController {
   async create(@Body() dto: CreateCalendarDto) {
     const { id, token } = await this.calendarsService.create(dto)
     return { success: !!id, data: { id, token } }
+  }
+
+  @Post(':calId/updateName')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update calendar name' })
+  @ApiParam({ name: 'calId', type: String })
+  @ApiResponse({ status: 200, description: 'Calendar updated' })
+  async updateName(@Param('calId') calId: string, @Body() dto: UpdateCalendarNameDto) {
+    const result = await this.calendarsService.updateName(calId, dto)
+    return { success: result }
   }
 
   @Post(':calId/access')
