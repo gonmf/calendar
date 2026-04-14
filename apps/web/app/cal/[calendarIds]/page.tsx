@@ -913,6 +913,8 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                     cursor: 'pointer',
                     minHeight: 110,
                     background: '#fff',
+                    minWidth: 0,
+                    overflow: 'hidden',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
@@ -964,8 +966,8 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                           background: ev.color || '#1a73e8',
                           color: 'white',
                           overflow: 'hidden',
-                          textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
+                          display: 'block',
                           cursor: 'pointer',
                           fontWeight: 500,
                           opacity: isPast ? 0.45 : 1,

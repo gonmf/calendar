@@ -1,9 +1,5 @@
 # calendar
 
-BUGS:
-
-- overflow hidden not applying to event titles in calendar cells.
-
 TODO:
 
 - calendar options
