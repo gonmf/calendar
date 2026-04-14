@@ -11,6 +11,8 @@ import { Cron } from '@nestjs/schedule'
 import { EventsService } from 'src/events/events.service'
 import { UpdateCalendarNameDto } from './dto/update-calendar-name.dto'
 import { EVENT_COLORS } from 'src/common/constants'
+import { UpdateCalendarColorDto } from './dto/update-calendar-color.dto'
+import { SetCalendarPasswordDto } from './dto/set-calendar-password.dto'
 
 const SALT_ROUNDS = 12
 
@@ -52,9 +54,64 @@ export class CalendarsService {
       return false
     }
 
-    const result = await this.calendarModel.updateOne({ id: calId }, { name: dto.name }).lean().exec()
+    const result = await this.calendarModel.updateOne({ id: calId, timeDeleted: null }, { name: dto.name }).lean().exec()
 
     return result.modifiedCount === 1
+  }
+
+  async updateColor(calId: string, dto: UpdateCalendarColorDto): Promise<boolean> {
+    if (!validateCalendarId(calId)) {
+      return false
+    }
+
+    const result = await this.calendarModel.updateOne({ id: calId, timeDeleted: null }, { color: dto.color }).lean().exec()
+
+    return result.modifiedCount === 1
+  }
+
+  async hasPassword(calId: string): Promise<boolean | undefined> {
+    if (!validateCalendarId(calId)) {
+      return
+    }
+
+    const calendar = await this.calendarModel.findOne({ id: calId, timeDeleted: null }, { password: 1 }).lean().exec()
+    return calendar ? !!calendar.password : undefined
+  }
+
+  async setPassword(calId: string, dto: SetCalendarPasswordDto): Promise<boolean> {
+    if (!validateCalendarId(calId)) {
+      return false
+    }
+
+    let password: string | undefined
+    let salt: string | undefined
+
+    if (dto.password) {
+      salt = await bcrypt.genSalt(SALT_ROUNDS)
+      password = await bcrypt.hash(dto.password, salt)
+    }
+
+    const result = await this.calendarModel.updateOne({ id: calId, timeDeleted: null }, { password, salt }).lean().exec()
+    return result.modifiedCount === 1
+  }
+
+  async removePassword(calId: string): Promise<boolean> {
+    if (!validateCalendarId(calId)) {
+      return false
+    }
+
+    const result = await this.calendarModel.updateOne({ id: calId, timeDeleted: null }, { password: null, salt: null }).lean().exec()
+    return result.modifiedCount === 1
+  }
+
+  async delete(calId: string): Promise<boolean> {
+    if (!validateCalendarId(calId)) {
+      return false
+    }
+
+    const result = await this.calendarModel.deleteOne({ id: calId })
+
+    return result.deletedCount === 1
   }
 
   async access(calId: string, dto: AccessCalendarDto): Promise<{ token: string, name: string, color: string }> {

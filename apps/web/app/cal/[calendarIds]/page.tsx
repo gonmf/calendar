@@ -69,6 +69,287 @@ function CopyButton({ value }: { value: string }) {
   )
 }
 
+function CalendarSettingsModal({ cal, onClose, onSaved, onDeleted }: {
+  cal: CalendarInfo
+  onClose: () => void
+  onSaved: (updated: CalendarInfo) => void
+  onDeleted: (calId: string) => void
+}) {
+  const [name, setName] = useState(cal.name)
+  const [color, setColor] = useState(cal.color || EVENT_COLORS[0]!)
+  const [nameError, setNameError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const [hasPassword, setHasPassword] = useState(false)
+  const [passwordLoading, setPasswordLoading] = useState(true)
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordSaved, setPasswordSaved] = useState(false)
+
+  const [deleteProgress, setDeleteProgress] = useState(0)
+  const [deleting, setDeleting] = useState(false)
+  const deleteIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    fetch(`http://localhost:3001/calendars/${cal.id}/hasPassword`, { method: 'GET' })
+      .then(r => r.json())
+      .then(json => { if (json.success) setHasPassword(json.hasPassword) })
+      .catch(() => {})
+      .finally(() => setPasswordLoading(false))
+  }, [cal.id])
+
+  const handleSaveName = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) { setNameError('Name is required.'); return }
+    if (trimmed.length > 60) { setNameError('Max 60 characters.'); return }
+    setSaving(true)
+    try {
+      const res = await fetch(`http://localhost:3001/calendars/${cal.id}/updateName`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        saveKnownCalendar(cal.id, trimmed, color)
+        onSaved({ ...cal, name: trimmed, color })
+      } else { setNameError('Something went wrong.') }
+    } catch { setNameError('Could not reach the server.') }
+    setSaving(false)
+  }
+
+  const handleSaveColor = async (c: string) => {
+    setColor(c)
+    try {
+      await fetch(`http://localhost:3001/calendars/${cal.id}/updateColor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color: c }),
+      })
+      saveKnownCalendar(cal.id, name.trim() || cal.name, c)
+      onSaved({ ...cal, name: name.trim() || cal.name, color: c })
+    } catch {}
+  }
+
+  const handleTogglePassword = async () => {
+    if (hasPassword) {
+      setPasswordSaving(true)
+      try {
+        const res = await fetch(`http://localhost:3001/calendars/${cal.id}/removePassword`, { method: 'POST' })
+        const json = await res.json()
+        if (json.success) { setHasPassword(false); setNewPassword('') }
+        else setPasswordError('Something went wrong.')
+      } catch { setPasswordError('Could not reach the server.') }
+      setPasswordSaving(false)
+    } else {
+      setHasPassword(true)
+    }
+  }
+
+  const handleSavePassword = async () => {
+    if (!newPassword) { setPasswordError('Enter a password.'); return }
+    setPasswordSaving(true)
+    setPasswordError('')
+    try {
+      const res = await fetch(`http://localhost:3001/calendars/${cal.id}/setPassword`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword }),
+      })
+      const json = await res.json()
+      if (json.success) { setPasswordSaved(true); setTimeout(() => setPasswordSaved(false), 2000) }
+      else setPasswordError('Something went wrong.')
+    } catch { setPasswordError('Could not reach the server.') }
+    setPasswordSaving(false)
+  }
+
+  const handleDeleteStart = () => {
+    setDeleteProgress(0)
+    const start = Date.now()
+    deleteIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - start
+      setDeleteProgress(Math.min(elapsed / 5000, 1))
+    }, 50)
+    deleteTimeoutRef.current = setTimeout(async () => {
+      clearInterval(deleteIntervalRef.current!)
+      setDeleting(true)
+      try {
+        const res = await fetch(`http://localhost:3001/calendars/${cal.id}/delete`, { method: 'POST' })
+        const json = await res.json()
+        if (json.success) onDeleted(cal.id)
+      } catch {}
+      setDeleting(false)
+    }, 5000)
+  }
+
+  const handleDeleteCancel = () => {
+    clearInterval(deleteIntervalRef.current!)
+    clearTimeout(deleteTimeoutRef.current!)
+    setDeleteProgress(0)
+  }
+
+  useEffect(() => () => {
+    clearInterval(deleteIntervalRef.current!)
+    clearTimeout(deleteTimeoutRef.current!)
+  }, [])
+
+  const sectionStyle: React.CSSProperties = {
+    padding: '20px 24px',
+    borderBottom: '1px solid #e8eaed',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  }
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#70757a',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#f6f8fc', borderRadius: 24, width: 480, maxWidth: '95vw', boxShadow: '0 8px 32px rgba(60,64,67,0.24)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid #e8eaed', flexShrink: 0 }}>
+          <span style={{ fontSize: 18, fontWeight: 500, color: '#3c4043' }}>Calendar settings</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5f6368', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+
+          {/* Name */}
+          <div style={sectionStyle}>
+            <div style={labelStyle}>Name</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={name}
+                onChange={e => { setName(e.target.value); setNameError('') }}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveName() }}
+                maxLength={60}
+                style={{ flex: 1, padding: '10px 12px', border: `1px solid ${nameError ? '#d93025' : '#dadce0'}`, borderRadius: 8, fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: '#3c4043' }}
+              />
+              <button
+                onClick={handleSaveName}
+                disabled={saving || !name.trim() || name.trim() === cal.name}
+                style={{ background: saving || !name.trim() || name.trim() === cal.name ? '#e8eaed' : '#1a73e8', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: 14, cursor: saving || !name.trim() || name.trim() === cal.name ? 'default' : 'pointer', color: saving || !name.trim() || name.trim() === cal.name ? '#9aa0a6' : 'white', fontWeight: 500, fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'background 0.15s' }}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            {nameError && <div style={{ fontSize: 12, color: '#d93025' }}>{nameError}</div>}
+          </div>
+
+          {/* Color */}
+          <div style={sectionStyle}>
+            <div style={labelStyle}>Color</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {EVENT_COLORS.map(c => (
+                  <div
+                    key={c}
+                    onClick={() => handleSaveColor(c)}
+                    style={{ width: 28, height: 28, borderRadius: '50%', background: c, cursor: 'pointer', border: color === c ? '3px solid #3c4043' : '3px solid transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.1s', flexShrink: 0 }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  >
+                    {color === c && (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Password */}
+          <div style={sectionStyle}>
+            <div style={labelStyle}>Password protection</div>
+            {passwordLoading ? (
+              <div style={{ fontSize: 13, color: '#70757a' }}>Loading…</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 14, color: '#3c4043' }}>
+                    {hasPassword ? 'Password enabled' : 'No password set'}
+                  </span>
+                  {/* Toggle */}
+                  <div
+                    onClick={handleTogglePassword}
+                    style={{ width: 44, height: 24, borderRadius: 12, background: hasPassword ? '#1a73e8' : '#dadce0', cursor: passwordSaving ? 'default' : 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
+                  >
+                    <div style={{ position: 'absolute', top: 3, left: hasPassword ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  </div>
+                </div>
+                {hasPassword && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={e => { setNewPassword(e.target.value); setPasswordError('') }}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSavePassword() }}
+                      placeholder="New password"
+                      style={{ padding: '10px 12px', border: `1px solid ${passwordError ? '#d93025' : '#dadce0'}`, borderRadius: 8, fontSize: 14, fontFamily: 'inherit', outline: 'none', background: '#fff', color: '#3c4043' }}
+                    />
+                    {passwordError && <div style={{ fontSize: 12, color: '#d93025' }}>{passwordError}</div>}
+                    <button
+                      onClick={handleSavePassword}
+                      disabled={passwordSaving || !newPassword}
+                      style={{ alignSelf: 'flex-end', background: passwordSaved ? '#0f9d58' : passwordSaving || !newPassword ? '#e8eaed' : '#1a73e8', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: 14, cursor: passwordSaving || !newPassword ? 'default' : 'pointer', color: passwordSaving || !newPassword ? '#9aa0a6' : 'white', fontWeight: 500, fontFamily: 'inherit', transition: 'background 0.15s' }}
+                    >
+                      {passwordSaved ? 'Saved!' : passwordSaving ? 'Saving…' : 'Set password'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Delete */}
+          <div style={{ ...sectionStyle, borderBottom: 'none' }}>
+            <div style={labelStyle}>Danger zone</div>
+            <div style={{ fontSize: 13, color: '#70757a' }}>
+              This permanently deletes the calendar and all its events.
+            </div>
+            <div style={{ position: 'relative', alignSelf: 'flex-start', marginTop: 4 }}>
+              <button
+                onMouseDown={handleDeleteStart}
+                onMouseUp={handleDeleteCancel}
+                onMouseLeave={handleDeleteCancel}
+                onTouchStart={handleDeleteStart}
+                onTouchEnd={handleDeleteCancel}
+                disabled={deleting}
+                style={{ position: 'relative', overflow: 'hidden', background: '#fce8e6', border: '1px solid #d93025', borderRadius: 8, padding: '10px 20px', fontSize: 14, cursor: deleting ? 'default' : 'pointer', color: '#d93025', fontWeight: 500, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                {/* fill bar */}
+                <div style={{ position: 'absolute', inset: 0, background: '#d93025', transformOrigin: 'left', transform: `scaleX(${deleteProgress})`, transition: deleteProgress === 0 ? 'transform 0.1s' : 'none', opacity: 0.15 }} />
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+                <span style={{ position: 'relative', width: "100px" }}>
+                  {deleting ? 'Deleting…' : deleteProgress > 0 ? `Hold… ${Math.ceil((1 - deleteProgress) * 5)}s` : 'Delete calendar'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SidebarCreateCalendar({ onClose, onOpen }: { onClose: () => void, onOpen: () => void }) {
   const router = useRouter()
   const [name, setName] = useState(() => '')
@@ -225,6 +506,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
   const [renameName, setRenameName] = useState('')
   const [renameError, setRenameError] = useState('')
   const [renameLoading, setRenameLoading] = useState(false)
+  const [calendarSettings, setCalendarSettings] = useState<CalendarInfo | null>(null)
 
   useEffect(() => {
     const handler = () => { setContextMenu(null); setCalendarOptionsMenu(null) }
@@ -565,6 +847,8 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     onMouseLeave: () => setHoveredBtn(null),
   })
 
+  const wheelCooldown = useRef(false)
+
   const handleRename = async () => {
     if (!renameCalendar) return
     const name = renameName.trim()
@@ -877,7 +1161,13 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         </div>
 
         {/* Calendar */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }} onClick={() => setSearchResults([])}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', margin: '12px', borderRadius: 12, border: '1px solid #dadce0', background: '#fff', boxShadow: '0 1px 3px rgba(60,64,67,0.1)' }} onClick={() => setSearchResults([])}
+          onWheel={e => {
+            if (Math.abs(e.deltaY) < 10 || wheelCooldown.current) return
+            wheelCooldown.current = true
+            setTimeout(() => { wheelCooldown.current = false }, 800)
+            changeMonth(e.deltaY > 0 ? 1 : -1)
+          }}>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #dadce0' }}>
             {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
@@ -1168,26 +1458,37 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
               </svg>
               Rename
             </div>
-            {[
-              { label: 'Share', icon: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></> },
-              { label: 'Settings', icon: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></> },
-            ].map(({ label, icon }) => (
-              <div
-                key={label}
-                onClick={() => {
-                  setCalendarOptionsMenu(null)
-                  // placeholder — actions to be wired up
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#e8eaed')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                style={{ padding: '10px 16px', fontSize: 14, color: '#3c4043', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'background 0.1s' }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#5f6368', flexShrink: 0 }}>
-                  {icon}
-                </svg>
-                {label}
-              </div>
-            ))}
+            {/* <div
+              key="Share"
+              onClick={() => {
+                setCalendarOptionsMenu(null)
+                // placeholder — actions to be wired up
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#e8eaed')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              style={{ padding: '10px 16px', fontSize: 14, color: '#3c4043', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'background 0.1s' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#5f6368', flexShrink: 0 }}>
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              Share
+            </div> */}
+            <div
+              key="Settings"
+              onClick={() => {
+                const cal = knownCalendars.find(c => c.id === calendarOptionsMenu!.calId)
+                if (cal) setCalendarSettings(cal)
+                setCalendarOptionsMenu(null)
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#e8eaed')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              style={{ padding: '10px 16px', fontSize: 14, color: '#3c4043', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'background 0.1s' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#5f6368', flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              Settings
+            </div>
             <div
               key="Forget"
               onClick={() => {
@@ -1274,6 +1575,22 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
 
           </div>
         </div>
+      )}
+
+      {calendarSettings && (
+        <CalendarSettingsModal
+          cal={calendarSettings}
+          onClose={() => setCalendarSettings(null)}
+          onSaved={updated => {
+            saveKnownCalendar(updated.id, updated.name, updated.color)
+            setKnownCalendars(getKnownCalendars())
+            setCalendarSettings(updated)
+          }}
+          onDeleted={calId => {
+            setCalendarSettings(null)
+            handleForget(calId)
+          }}
+        />
       )}
     </div>
   )
