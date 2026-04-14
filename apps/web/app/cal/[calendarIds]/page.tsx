@@ -508,6 +508,8 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
   const [renameLoading, setRenameLoading] = useState(false)
   const [calendarSettings, setCalendarSettings] = useState<CalendarInfo | null>(null)
 
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+
   useEffect(() => {
     const handler = () => { setContextMenu(null); setCalendarOptionsMenu(null) }
     const keyHandler = (e: KeyboardEvent) => {
@@ -1051,19 +1053,31 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
         )}
       </div>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative'  }}>
+        {/* Backdrop */}
+        {sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            style={{ position: 'absolute', inset: 0, zIndex: 10 }}
+          />
+        )}
 
         {/* Sidebar */}
         <div style={{
-          width: sidebarOpen ? 240 : 0,
-          minWidth: sidebarOpen ? 240 : 0,
-          overflow: 'hidden',
-          transition: 'width 0.2s ease, min-width 0.2s ease',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: 240,
+          transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.2s ease',
           background: '#f6f8fc',
-          borderRight: sidebarOpen ? '1px solid #dadce0' : 'none',
+          borderRight: '1px solid #dadce0',
           display: 'flex',
           flexDirection: 'column',
-          padding: sidebarOpen ? '20px 16px' : 0,
+          padding: '20px 16px',
+          zIndex: 20,
+          overflowY: 'auto',
         }}>
           {sidebarOpen && (
             <>
@@ -1081,7 +1095,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                     width: 24, height: 24, borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: 'pointer',
-                    visibility: sidebarHeaderHovered ? 'visible' : 'hidden',
+                    visibility: (isMobile || sidebarHeaderHovered) ? 'visible' : 'hidden',
                     color: '#5f6368',
                     fontSize: 20,
                     lineHeight: 1,
@@ -1144,7 +1158,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                           e.stopPropagation()
                           setCalendarOptionsMenu({ calId: cal.id, x: e.clientX, y: e.clientY })
                         }}
-                        style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', visibility: isHovered ? 'visible' : 'hidden' }}
+                        style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', visibility: (isMobile || isHovered) ? 'visible' : 'hidden' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#dadce0')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
