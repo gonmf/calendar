@@ -99,6 +99,13 @@ export default function HomePage() {
             localStorage.setItem('cal_tokens', JSON.stringify(store))
           } catch {}
         }
+        if (json.data.color) {
+          try {
+            const store = JSON.parse(localStorage.getItem('cal_colors') ?? '{}')
+            store[json.data.id] = json.data.color
+            localStorage.setItem('cal_colors', JSON.stringify(store))
+          } catch {}
+        }
         router.push(`/cal/${json.data.id}?new=1`)
       } else {
         setCreateError('Something went wrong. Please try again.')

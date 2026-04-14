@@ -5,7 +5,7 @@ import EventModal, { CalEvent, EventPayload } from '../../../components/EventMod
 import { RRule } from 'rrule'
 import AccessGate from '../../../components/AccessGate'
 import { useSearchParams, useRouter } from 'next/navigation'
-import EVENT_COLORS from '../../../components/colors'
+import { EVENT_COLORS } from '../../../components/colors'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const CALENDARS_KEY = 'known_calendars'
@@ -23,6 +23,7 @@ interface ContextMenu {
 interface CalendarInfo {
   id: string
   name: string
+  color: string
 }
 
 interface Toast {
@@ -43,10 +44,10 @@ function getKnownCalendars(): CalendarInfo[] {
   } catch { return [] }
 }
 
-function saveKnownCalendar(id: string, name: string) {
+function saveKnownCalendar(id: string, name: string, color: string) {
   try {
     const existing = getKnownCalendars().filter(c => c.id !== id)
-    existing.push({ id, name })
+    existing.push({ id, name, color })
     existing.sort((a, b) => a.name.localeCompare(b.name))
     localStorage.setItem(CALENDARS_KEY, JSON.stringify(existing))
   } catch {}
@@ -254,7 +255,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
 
   useEffect(() => {
     if (!accessGranted) return
-    grantedCalendars.forEach(cal => saveKnownCalendar(cal.id, cal.name))
+    grantedCalendars.forEach(cal => saveKnownCalendar(cal.id, cal.name, cal.color))
     setKnownCalendars(getKnownCalendars())
     if (searchParams.get('new') === '1') {
       setShowWelcome(true)
@@ -417,7 +418,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
       const endDay = new Date(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
       if (endDay < startDay) return
       const cursor = new Date(startDay)
-      while (cursor < endDay) {
+      while (cursor <= endDay) {
         addToDate(cursor, ev)
         cursor.setDate(cursor.getDate() + 1)
       }
@@ -533,7 +534,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
     const evCalId = getEventCalId(ev)
     setContextMenu(null)
     try {
-      const res = await fetch(`http://localhost:3001/events/${evCalId}/update/${ev.id}`, {
+      const res = await fetch(`http://localhost:3001/events/${evCalId}/updateColor/${ev.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ color }),
@@ -578,7 +579,8 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
       })
       const json = await res.json()
       if (json.success) {
-        saveKnownCalendar(renameCalendar.id, name)
+        const known = getKnownCalendars().find(cal => cal.id === renameCalendar.id)
+        saveKnownCalendar(renameCalendar.id, name, known!.color)
         setKnownCalendars(getKnownCalendars())
         setRenameCalendar(null)
       } else {
@@ -602,11 +604,16 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
       return next.length > 0 ? next : prev // don't remove if it's the last one
     })
 
-    // remove token
+    // remove token and color
     try {
       const store = JSON.parse(localStorage.getItem('cal_tokens') ?? '{}')
       delete store[calId]
       localStorage.setItem('cal_tokens', JSON.stringify(store))
+    } catch {}
+    try {
+      const store = JSON.parse(localStorage.getItem('cal_colors') ?? '{}')
+      delete store[calId]
+      localStorage.setItem('cal_colors', JSON.stringify(store))
     } catch {}
 
     setForgetConfirm(null)
@@ -827,8 +834,8 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
                         onClick={e => { e.stopPropagation(); if (!isOnly) toggleCalendar(cal.id) }}
                         style={{
                           width: 18, height: 18, borderRadius: 3,
-                          border: `2px solid ${isActive ? '#1a73e8' : '#5f6368'}`,
-                          background: isActive ? '#1a73e8' : '#fff',
+                          border: `2px solid ${isActive ? cal.color || EVENT_COLORS[0] : '#5f6368'}`,
+                          background: isActive ? cal.color || EVENT_COLORS[0] : '#fff',
                           flexShrink: 0,
                           cursor: isOnly ? 'not-allowed' : 'pointer',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -981,6 +988,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
           date={modalDate}
           calendarId={calendarOptions[0]!.id}
           calendarOptions={calIdList.length > 1 ? calendarOptions : undefined}
+          defaultColor={calendarOptions[0]!.color}
           onClose={() => setModalDate(null)}
           onSave={async (payload, calId) => { await handleCreate(payload, calId); setModalDate(null) }}
         />
@@ -992,6 +1000,7 @@ export default function CalendarPage({ params }: { params: Promise<{ calendarIds
           event={editEvent}
           calendarId={editEvent.calId}
           calendarOptions={calIdList.length > 1 ? calendarOptions : undefined}
+          defaultColor={editEvent.color}
           onClose={() => setEditEvent(null)}
           onSave={handleUpdate}
           onDelete={handleDelete}

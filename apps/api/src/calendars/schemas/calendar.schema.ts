@@ -29,6 +29,10 @@ export class Calendar {
 
   @Prop()
   salt?: string
+
+  @ApiProperty()
+  @Prop({ required: true })
+  color: string
 }
 
 export const CalendarSchema = SchemaFactory.createForClass(Calendar)

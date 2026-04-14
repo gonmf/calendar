@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { EVENT_COLORS } from './colors'
 
 interface CalendarInfo {
   id: string
   name: string
+  color: string
 }
 
 interface Props {
@@ -25,28 +27,43 @@ const fieldInputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 }
 
-const TOKEN_STORE_KEY = 'cal_tokens'
-
 function getStoredToken(calId: string): string | null {
   try {
-    const store = JSON.parse(localStorage.getItem(TOKEN_STORE_KEY) ?? '{}')
+    const store = JSON.parse(localStorage.getItem('cal_tokens') ?? '{}')
     return store[calId] ?? null
   } catch { return null }
 }
 
-function storeToken(calId: string, token: string) {
+function getStoredColor(calId: string): string | null {
   try {
-    const store = JSON.parse(localStorage.getItem(TOKEN_STORE_KEY) ?? '{}')
+    const store = JSON.parse(localStorage.getItem('cal_colors') ?? '{}')
+    return store[calId] ?? null
+  } catch { return null }
+}
+
+function storeToken(calId: string, token: string, color: string) {
+  try {
+    const store = JSON.parse(localStorage.getItem('cal_tokens') ?? '{}')
     store[calId] = token
-    localStorage.setItem(TOKEN_STORE_KEY, JSON.stringify(store))
+    localStorage.setItem('cal_tokens', JSON.stringify(store))
+  } catch {}
+  try {
+    const store = JSON.parse(localStorage.getItem('cal_colors') ?? '{}')
+    store[calId] = color
+    localStorage.setItem('cal_colors', JSON.stringify(store))
   } catch {}
 }
 
 function clearToken(calId: string) {
   try {
-    const store = JSON.parse(localStorage.getItem(TOKEN_STORE_KEY) ?? '{}')
+    const store = JSON.parse(localStorage.getItem('cal_tokens') ?? '{}')
     delete store[calId]
-    localStorage.setItem(TOKEN_STORE_KEY, JSON.stringify(store))
+    localStorage.setItem('cal_tokens', JSON.stringify(store))
+  } catch {}
+  try {
+    const store = JSON.parse(localStorage.getItem('cal_colors') ?? '{}')
+    delete store[calId]
+    localStorage.setItem('cal_colors', JSON.stringify(store))
   } catch {}
 }
 
@@ -77,9 +94,9 @@ export default function AccessGate({ calIds, onGranted }: Props) {
     return res.json()
   }
 
-  const advance = (name: string, token: string) => {
-    storeToken(currentCalId, token)
-    const newResults = [...results, { id: currentCalId, name }]
+  const advance = (name: string, token: string, color: string) => {
+    storeToken(currentCalId, token, color)
+    const newResults = [...results, { id: currentCalId, name, color }]
     if (currentIndex + 1 === total) {
       onGranted(newResults)
     } else {
@@ -96,10 +113,11 @@ export default function AccessGate({ calIds, onGranted }: Props) {
     setCurrentName(null)
     const check = async () => {
       const token = getStoredToken(currentCalId)
+      // const color = getStoredColor(currentCalId) ?? EVENT_COLORS[0]
       const json = await attemptAccess(currentCalId, token ? { token } : {})
 
       if (json.success) {
-        advance(json.name, json.token)
+        advance(json.name, json.token, json.color)
       } else if (json.reason === 'password_required' || json.reason === 'invalid_token') {
         clearToken(currentCalId)
         setCurrentName(null)
@@ -120,7 +138,7 @@ export default function AccessGate({ calIds, onGranted }: Props) {
     try {
       const json = await attemptAccess(currentCalId, { password })
       if (json.success) {
-        advance(json.name, json.token)
+        advance(json.name, json.token, json.color)
       } else if (json.reason === 'wrong_password') {
         setError('Incorrect password.')
       } else {

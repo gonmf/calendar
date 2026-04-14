@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import RecurrencePicker from './RecurrencePicker'
-import EVENT_COLORS from './colors'
+import { EVENT_COLORS } from './colors'
 
 const TIMEZONES: string[] = [
   'Pacific/Midway', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
@@ -74,6 +74,7 @@ interface Props {
   event?: CalEvent
   calendarId?: string
   calendarOptions?: { id: string, name: string }[]
+  defaultColor: string
   onClose: () => void
   onSave: (event: EventPayload, calId: string) => void
   onDelete?: () => void
@@ -110,7 +111,7 @@ const selectStyle: React.CSSProperties = {
   outline: 'none',
 }
 
-export default function EventModal({ date, event, calendarId, calendarOptions, onClose, onSave, onDelete }: Props) {
+export default function EventModal({ date, event, calendarId, calendarOptions, defaultColor, onClose, onSave, onDelete }: Props) {
   const now = new Date()
   const titleRef = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState(event?.title ?? '')
@@ -120,11 +121,11 @@ export default function EventModal({ date, event, calendarId, calendarOptions, o
     event ? new Date(event.startTime) : new Date(date.getFullYear(), date.getMonth(), date.getDate(), now.getHours(), 0)
   )
   const [endDt, setEndDt] = useState(
-    event ? new Date(event.endTime) : new Date(date.getFullYear(), date.getMonth(), date.getDate(), now.getHours() + 1, 0)
+    event ? new Date(event.endTime) : new Date(date.getFullYear(), date.getMonth(), date.getDate(), now.getHours(), 0)
   )
   const [startZone, setStartZone] = useState(event?.startZone ?? 'Europe/Lisbon')
   const [endZone, setEndZone] = useState(event?.endZone ?? 'Europe/Lisbon')
-  const [color, setColor] = useState(event?.color ?? EVENT_COLORS[0])
+  const [color, setColor] = useState(event?.color ?? defaultColor ?? EVENT_COLORS[0])
   const [errors, setErrors] = useState<string[]>([])
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null)
   const [selectedCalId, setSelectedCalId] = useState(calendarId ?? '')
@@ -154,11 +155,11 @@ export default function EventModal({ date, event, calendarId, calendarOptions, o
     if (allDay) {
       if (isNaN(startDt.getTime())) errs.push('Start date is invalid')
       if (isNaN(endDt.getTime())) errs.push('End date is invalid')
-      if (errs.length === 0 && endDt < startDt) errs.push('End date must be on or after start date')
+      if (errs.length === 0 && endDt < startDt) errs.push('End date cannot be before the start date')
     } else {
       if (isNaN(startDt.getTime())) errs.push('Start date is invalid')
       if (isNaN(endDt.getTime())) errs.push('End date is invalid')
-      if (errs.length === 0 && endDt.getTime() <= startDt.getTime()) errs.push('End must be after start')
+      if (errs.length === 0 && endDt.getTime() < startDt.getTime()) errs.push('End must be after start')
     }
 
     if (errs.length > 0) { setErrors(errs); return }

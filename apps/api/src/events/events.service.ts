@@ -6,6 +6,7 @@ import { CreateEventDto } from './dto/create-event.dto'
 import { UpdateEventDto } from './dto/update-event.dto'
 import { generateEventId, validateCalendarId, validateEventId } from 'src/ids'
 import { UpdateEventColorDto } from './dto/update-event-color.dto'
+import { EVENT_COLORS, TIMEZONES } from 'src/common/constants'
 
 @Injectable()
 export class EventsService {
@@ -60,6 +61,10 @@ export class EventsService {
     }
 
     const { color } = dto
+
+    if (!EVENT_COLORS.includes(dto.color)) {
+      return false
+    }
 
     const result = await this.eventModel.updateOne({ calId, id: eventId, timeDeleted: null }, { color }).lean().exec()
     return result.modifiedCount === 1
@@ -161,6 +166,15 @@ export class EventsService {
       if ((dto.endTime % 60000) !== 0) {
         return false
       }
+    }
+    if (!TIMEZONES.includes(dto.startZone)) {
+      return false
+    }
+    if (!TIMEZONES.includes(dto.endZone)) {
+      return false
+    }
+    if (!EVENT_COLORS.includes(dto.color)) {
+      return false
     }
 
     return true

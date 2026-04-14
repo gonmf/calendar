@@ -10,6 +10,7 @@ import { generateCalendarId, validateCalendarId } from 'src/ids'
 import { Cron } from '@nestjs/schedule'
 import { EventsService } from 'src/events/events.service'
 import { UpdateCalendarNameDto } from './dto/update-calendar-name.dto'
+import { EVENT_COLORS } from 'src/common/constants'
 
 const SALT_ROUNDS = 12
 
@@ -21,7 +22,7 @@ export class CalendarsService {
     private eventsService: EventsService,
   ) {}
 
-  async create(dto: CreateCalendarDto): Promise<{ id?: string, token?: string }> {
+  async create(dto: CreateCalendarDto): Promise<{ id: string, token: string, color: string }> {
     let password: string | undefined
     let salt: string | undefined
 
@@ -38,11 +39,12 @@ export class CalendarsService {
       salt,
       timeCreated: now,
       timeUpdated: now,
+      color: EVENT_COLORS[Math.floor(Math.random() * EVENT_COLORS.length)],
     })
 
     const token = this.issueToken(created.id, password ?? null)
 
-    return { id: created.id, token }
+    return { id: created.id, token, color: created.color }
   }
 
   async updateName(calId: string, dto: UpdateCalendarNameDto): Promise<boolean> {
@@ -55,7 +57,7 @@ export class CalendarsService {
     return result.modifiedCount === 1
   }
 
-  async access(calId: string, dto: AccessCalendarDto): Promise<{ token: string, name: string }> {
+  async access(calId: string, dto: AccessCalendarDto): Promise<{ token: string, name: string, color: string }> {
     if (!validateCalendarId(calId)) {
       throw new NotFoundException('Calendar not found')
     }
@@ -66,7 +68,7 @@ export class CalendarsService {
 
     // no password required — issue token immediately
     if (!calendar.password) {
-      return { token: this.issueToken(calId, null), name: calendar.name }
+      return { token: this.issueToken(calId, null), name: calendar.name, color: calendar.color }
     }
 
     // existing token provided — validate it
@@ -74,7 +76,7 @@ export class CalendarsService {
       try {
         const payload = await this.jwtService.verifyAsync(dto.token)
         if (payload.calId === calId && payload.passwordHash === calendar.password) {
-          return { token: this.issueToken(calId, calendar.password), name: calendar.name }
+          return { token: this.issueToken(calId, calendar.password), name: calendar.name, color: calendar.color }
         }
       } catch {
         // token invalid or expired — fall through to password check
@@ -85,7 +87,7 @@ export class CalendarsService {
     if (dto.password) {
       const match = await bcrypt.compare(dto.password, calendar.password)
       if (match) {
-        return { token: this.issueToken(calId, calendar.password), name: calendar.name }
+        return { token: this.issueToken(calId, calendar.password), name: calendar.name, color: calendar.color }
       }
       throw new UnauthorizedException('wrong_password')
     }
